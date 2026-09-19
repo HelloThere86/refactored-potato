@@ -1,0 +1,78 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-8">
+        <h2 class="mb-4">Current Financial Status</h2>
+        
+        <div class="row g-3">
+            <!-- Business Owner Language used here -->
+            <div class="col-md-6">
+                <div class="card bg-white shadow-sm h-100 border-0">
+                    <div class="card-body">
+                        <h5 class="text-muted">Total Sales Generated</h5>
+                        <h2 class="text-primary">${{ "%.2f"|format(sales) }}</h2>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="card bg-white shadow-sm h-100 border-0">
+                    <div class="card-body">
+                        <h5 class="text-muted">Actual Cash Received</h5>
+                        <h2 class="text-success">${{ "%.2f"|format(cash) }}</h2>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-6">
+                <div class="card bg-white shadow-sm h-100 border-0">
+                    <div class="card-body">
+                        <h5 class="text-muted">Money Customers Owe Us</h5>
+                        <h2 class="text-warning">${{ "%.2f"|format(debt) }}</h2>
+                        <small>Unpaid credit sales</small>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-6">
+                <div class="card bg-white shadow-sm h-100 border-0">
+                    <div class="card-body">
+                        <h5 class="text-muted">Total Expenses</h5>
+                        <h2 class="text-danger">${{ "%.2f"|format(expenses) }}</h2>
+                        <small>Money spent</small>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-12 mt-4">
+                <div class="card bg-dark text-white shadow-sm border-0">
+                    <div class="card-body d-flex justify-content-between align-items-center">
+                        <div>
+                            <h5 class="text-light mb-0">Estimated Profit</h5>
+                            <small class="text-light">(Sales minus Expenses)</small>
+                        </div>
+                        <h2 class="mb-0">${{ "%.2f"|format(profit) }}</h2>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <h2 class="mb-4">Quick Actions</h2>
+        <a href="/sales/new" class="btn btn-primary btn-huge shadow-sm">
+            ➕ Record a Sale
+        </a>
+        <a href="/expenses/new" class="btn btn-danger btn-huge shadow-sm">
+            ➖ Record an Expense
+        </a>
+        <a href="/payments/new" class="btn btn-success btn-huge shadow-sm">
+            💵 Record Customer Payment
+        </a>
+        <a href="/profitability" class="btn btn-info btn-huge text-white shadow-sm">
+            📊 View Profitability
+        </a>
+    </div>
+</div>
+{% endblock %}
