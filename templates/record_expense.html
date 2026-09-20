@@ -1,45 +1,50 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="card shadow-sm border-0 mx-auto" style="max-width: 600px;">
-    <div class="card-body p-5">
-        <h2 class="mb-4 text-danger">➖ Record an Expense</h2>
-        
-        <form method="POST">
-            <div class="row mb-3">
-                <div class="col-md-6">
-                    <label class="form-label fw-bold">Amount Spent ($)</label>
-                    <input type="number" step="0.01" name="amount" class="form-control form-control-lg" required>
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label fw-bold">Category</label>
-                    <select name="category" class="form-select form-select-lg" required>
-                        <option value="">Select...</option>
-                        {% for cat in categories %}
-                            <option value="{{ cat }}">{{ cat }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-            </div>
+<h1 class="panel-title">Record an expense</h1>
 
-            <div class="mb-3">
-                <label class="form-label fw-bold">What was this for? (Short Description)</label>
-                <input type="text" name="description" class="form-control" placeholder="e.g., Bought 2 bags of Compound D" required>
-            </div>
-
-            <div class="mb-4 p-3 bg-light rounded border border-warning">
-                <label class="form-label fw-bold">Which part of the business is this for?</label>
-                <select name="unit_id" class="form-select form-select-lg">
-                    <option value="shared">General / Shared Expense (Applies to whole farm)</option>
-                    {% for u in units %}
-                        <option value="{{ u.id }}">Directly for: {{ u.name }}</option>
-                    {% endfor %}
-                </select>
-                <small class="text-muted mt-2 d-block">If you bought fertilizer specifically for Fancy Lettuce, select Fancy Lettuce. If you bought farm diesel, leave it as Shared.</small>
-            </div>
-            
-            <button type="submit" class="btn btn-danger btn-lg w-100">Save Expense</button>
-        </form>
+<div class="form-sheet">
+  <form method="POST">
+    <div class="row g-3 mb-3">
+      <div class="col-md-6">
+        <label class="form-label" for="amount">Amount spent</label>
+        <div class="input-group input-group-lg">
+          <span class="input-group-text">$</span>
+          <input type="number" step="0.01" min="0" id="amount" name="amount" class="form-control" required>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label" for="category">Category</label>
+        <select id="category" name="category" class="form-select form-select-lg" required>
+          <option value="">Choose a category</option>
+          {% for cat in categories %}
+            <option value="{{ cat }}">{{ cat }}</option>
+          {% endfor %}
+        </select>
+      </div>
     </div>
+
+    <div class="mb-3">
+      <label class="form-label" for="description">What was this for?</label>
+      <input type="text" id="description" name="description" class="form-control" placeholder="For example, 2 bags of Compound D" required>
+    </div>
+
+    <div class="form-section">
+      <label class="form-label" for="unit_id">Which product is this for?</label>
+      <select id="unit_id" name="unit_id" class="form-select form-select-lg" aria-describedby="unit-help">
+        <option value="shared">Shared farm expense</option>
+        {% for u in units %}
+          <option value="{{ u.id }}">{{ u.name }} only</option>
+        {% endfor %}
+      </select>
+      <div id="unit-help" class="form-text mt-2">
+        Choose a product if the expense belongs to it alone, such as fertilizer for Fancy Lettuce. Leave it on shared for costs like diesel or electricity.
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary btn-lg">Save expense</button>
+    </div>
+  </form>
 </div>
 {% endblock %}

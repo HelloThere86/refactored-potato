@@ -1,158 +1,109 @@
 {% extends 'base.html' %}
 
+{% macro money(v) -%}
+  {%- if v < 0 %}−{% endif %}${{ "{:,.2f}".format(v|abs) }}
+{%- endmacro %}
+
 {% block content %}
-<div class="row mb-3">
-    <div class="col-12 d-flex justify-content-between align-items-center">
-        <h2>📊 Profitability Overview</h2>
-        <a href="/" class="btn btn-outline-secondary">Back to Dashboard</a>
-    </div>
+<h1 class="panel-title">Profitability</h1>
+
+<h2 class="section-title">Whole farm</h2>
+<div class="measure">
+  <table class="ledger">
+    <caption class="visually-hidden">Revenue, expenses and estimated profit for the whole farm</caption>
+    <tbody>
+      <tr class="ledger-head">
+        <th scope="row">Total revenue</th>
+        <td>{{ money(farm_revenue) }}</td>
+      </tr>
+      <tr class="ledger-part">
+        <th scope="row">Cash received</th>
+        <td>{{ money(farm_cash) }}</td>
+      </tr>
+      <tr class="ledger-part ledger-part-last ledger-owed">
+        <th scope="row">Customers still owe us</th>
+        <td>{{ money(farm_credit) }}</td>
+      </tr>
+
+      <tr class="ledger-head">
+        <th scope="row">Total expenses</th>
+        <td>{{ money(farm_expenses) }}</td>
+      </tr>
+      <tr class="ledger-part">
+        <th scope="row">
+          Direct expenses
+          <span class="ledger-note">Belong to one product, such as lettuce seeds</span>
+        </th>
+        <td>{{ money(farm_direct) }}</td>
+      </tr>
+      <tr class="ledger-part ledger-part-last">
+        <th scope="row">
+          Shared farm expenses
+          <span class="ledger-note">Not assigned to a product, such as general electricity</span>
+        </th>
+        <td>{{ money(farm_shared) }}</td>
+      </tr>
+
+      <tr class="ledger-total{% if farm_profit < 0 %} ledger-loss{% endif %}">
+        <th scope="row">
+          Estimated profit
+          <span class="ledger-note">Revenue minus expenses</span>
+          <span class="ledger-note">Profit margin: {{ "{:.1f}".format(farm_margin) }}%</span>
+        </th>
+        <td>{{ money(farm_profit) }}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  {% if expenses_by_category %}
+  <details class="breakdown">
+    <summary>Expenses by category</summary>
+    <table class="ledger ledger-quiet">
+      <caption class="visually-hidden">Expenses by category</caption>
+      <tbody>
+        {% for category, amount in expenses_by_category %}
+        <tr>
+          <th scope="row">{{ category }}</th>
+          <td>{{ money(amount) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </details>
+  {% endif %}
 </div>
 
-<!-- Terminology Explanation -->
-<div class="alert alert-info shadow-sm mb-4">
-    <h5 class="alert-heading">Understanding Your Profitability</h5>
-    <ul class="mb-0">
-        <li><strong>Direct Expenses:</strong> Expenses specifically associated with a single business (e.g., Lettuce Seeds).</li>
-        <li><strong>Farm-Wide / Shared Expenses:</strong> Expenses that support the farm as a whole and have not been assigned to a specific business (e.g., General Electricity).</li>
-        <li><strong>Estimated Profit:</strong> Revenue minus the expenses currently allocated. <em>(Note: Individual business profits do not currently include farm-wide shared costs, which are only deducted from the Entire Farm total).</em></li>
-    </ul>
-</div>
-
-<!-- Entire Farm Section -->
-<div class="card shadow border-primary mb-5">
-    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
-        <h3 class="mb-0">🏠 ENTIRE FARM (Overall Performance)</h3>
-    </div>
-    <div class="card-body">
-        <div class="row">
-            <!-- Farm Primary Math -->
-            <div class="col-md-5 border-end">
-                <div class="d-flex justify-content-between mb-2 fs-5">
-                    <span class="text-muted">Total Revenue:</span>
-                    <span class="fw-bold">${{ "%.2f"|format(farm_revenue) }}</span>
-                </div>
-                <div class="d-flex justify-content-between mb-2 fs-5">
-                    <span class="text-muted">Total Expenses:</span>
-                    <span class="fw-bold text-danger">-${{ "%.2f"|format(farm_expenses) }}</span>
-                </div>
-                <hr>
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <span class="fw-bold fs-4">Estimated Profit:</span>
-                    {% if farm_profit >= 0 %}
-                        <span class="fw-bold fs-3 text-success">${{ "%.2f"|format(farm_profit) }}</span>
-                    {% else %}
-                        <span class="fw-bold fs-3 text-danger">-${{ "%.2f"|format(farm_profit|abs) }}</span>
-                    {% endif %}
-                </div>
-                <div class="mt-2">
-                    <span class="text-muted">Profit Margin:</span>
-                    <span class="badge {% if farm_margin > 0 %}bg-success{% else %}bg-danger{% endif %} ms-2 fs-6">
-                        {{ "%.1f"|format(farm_margin) }}%
-                    </span>
-                </div>
-            </div>
-
-            <!-- Farm Cash Flow & Breakdowns -->
-            <div class="col-md-7 ps-4">
-                <div class="row mb-3">
-                    <div class="col-6">
-                        <span class="text-muted d-block">Actual Cash Received</span>
-                        <span class="fw-bold text-success fs-5">${{ "%.2f"|format(farm_cash) }}</span>
-                    </div>
-                    <div class="col-6">
-                        <span class="text-muted d-block">Outstanding Credit</span>
-                        <span class="fw-bold text-warning fs-5">${{ "%.2f"|format(farm_credit) }}</span>
-                    </div>
-                </div>
-
-                <div class="row">
-                    <div class="col-12">
-                        <button class="btn btn-outline-primary btn-sm w-100 text-start d-flex justify-content-between" data-bs-toggle="collapse" data-bs-target="#farmBreakdown">
-                            <span>View Expense Breakdown Details</span>
-                            <span>▼</span>
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Collapsible Breakdown -->
-                <div class="collapse mt-3" id="farmBreakdown">
-                    <div class="row">
-                        <div class="col-md-6 border-end">
-                            <h6 class="fw-bold">Expense Allocation</h6>
-                            <ul class="list-unstyled">
-                                <li class="d-flex justify-content-between">
-                                    <small class="text-muted">Direct / Business-Specific:</small>
-                                    <small class="fw-bold">${{ "%.2f"|format(farm_direct) }}</small>
-                                </li>
-                                <li class="d-flex justify-content-between">
-                                    <small class="text-muted">Farm-Wide / Shared:</small>
-                                    <small class="fw-bold">${{ "%.2f"|format(farm_shared) }}</small>
-                                </li>
-                            </ul>
-                        </div>
-                        <div class="col-md-6">
-                            <h6 class="fw-bold">Expenses By Category</h6>
-                            <ul class="list-unstyled">
-                                {% for category, amount in expenses_by_category %}
-                                <li class="d-flex justify-content-between">
-                                    <small class="text-muted">{{ category }}:</small>
-                                    <small class="fw-bold">${{ "%.2f"|format(amount) }}</small>
-                                </li>
-                                {% endfor %}
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Individual Business Units Section -->
-<h3 class="mb-3 text-secondary">INDIVIDUAL BUSINESS UNITS</h3>
-<div class="row g-4">
+<h2 class="section-title">Each product</h2>
+{% if performance %}
+<table class="units">
+  <caption class="visually-hidden">Revenue, direct expenses and estimated profit for each product</caption>
+  <thead>
+    <tr>
+      <th scope="col">Product</th>
+      <th scope="col">Revenue</th>
+      <th scope="col">Direct expenses</th>
+      <th scope="col">Estimated profit</th>
+      <th scope="col">Margin</th>
+    </tr>
+  </thead>
+  <tbody>
     {% for p in performance %}
-    <div class="col-md-6 col-lg-4">
-        <div class="card shadow-sm border-0 h-100">
-            <div class="card-header bg-dark text-white fw-bold fs-5 d-flex justify-content-between">
-                <span>{{ p.name }}</span>
-            </div>
-            <div class="card-body">
-                <div class="d-flex justify-content-between mb-2">
-                    <span class="text-muted">Revenue:</span>
-                    <span class="fw-bold">${{ "%.2f"|format(p.revenue) }}</span>
-                </div>
-                <!-- Changed label from 'Direct Costs' to 'Direct Expenses' for clarity -->
-                <div class="d-flex justify-content-between mb-2">
-                    <span class="text-muted">Direct Expenses:</span>
-                    <span class="fw-bold text-danger">-${{ "%.2f"|format(p.costs) }}</span>
-                </div>
-                <hr>
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <span class="fw-bold fs-5">Estimated Profit:</span>
-                    {% if p.profit >= 0 %}
-                        <span class="fw-bold fs-4 text-success">${{ "%.2f"|format(p.profit) }}</span>
-                    {% else %}
-                        <span class="fw-bold fs-4 text-danger">-${{ "%.2f"|format(p.profit|abs) }}</span>
-                    {% endif %}
-                </div>
-                
-                <div class="mt-3">
-                    <span class="text-muted small">Profit Margin:</span>
-                    <span class="badge {% if p.margin > 0 %}bg-success{% else %}bg-danger{% endif %} ms-2">
-                        {{ "%.1f"|format(p.margin) }}%
-                    </span>
-                </div>
-                
-                {% if p.profit < 0 %}
-                <div class="alert alert-warning mt-3 mb-0 p-2 small">
-                    Direct expenses exceed revenue by ${{ "%.2f"|format(p.profit|abs) }}.
-                </div>
-                {% endif %}
-            </div>
-        </div>
-    </div>
+    <tr>
+      <th scope="row">{{ p.name }}</th>
+      <td data-label="Revenue">{{ money(p.revenue) }}</td>
+      <td data-label="Direct expenses">{{ money(p.costs) }}</td>
+      <td data-label="Estimated profit" class="profit{% if p.profit < 0 %} is-loss{% endif %}">{{ money(p.profit) }}</td>
+      <td data-label="Margin"{% if p.margin < 0 %} class="is-loss"{% endif %}>{{ "{:.1f}".format(p.margin) }}%</td>
+    </tr>
     {% endfor %}
-</div>
+  </tbody>
+</table>
+<p class="table-note">
+  Product profits leave out shared farm expenses. Those are only taken off in the whole-farm total above.
+</p>
+{% else %}
+<p class="empty-note">
+  No products yet. <a href="/settings">Add one in Settings</a>, then record sales and expenses against it.
+</p>
+{% endif %}
 {% endblock %}
