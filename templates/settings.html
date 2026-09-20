@@ -34,6 +34,9 @@
                         <span class="d-block mb-1 {% if c.balance > 0 %}text-warning fw-bold{% else %}text-success{% endif %}">
                             Owes: ${{ "%.2f"|format(c.balance) }}
                         </span>
+                        <!-- Added Edit Button Here -->
+                        <a href="/settings/edit_customer/{{ c.id }}" class="btn btn-sm btn-outline-primary me-1">Edit</a>
+                        
                         <a href="/settings/toggle/customer/{{ c.id }}" class="btn btn-sm btn-outline-secondary">
                             {% if c.is_active %}Archive{% else %}Restore{% endif %}
                         </a>

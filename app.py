@@ -206,6 +206,22 @@ def settings():
     
     return render_template('settings.html', customers=customers, units=units)
 
+@app.route('/settings/edit_customer/<int:id>', methods=['GET', 'POST'])
+def edit_customer(id):
+    """Allows the user to edit an existing customer's details"""
+    customer = Customer.query.get_or_404(id)
+    
+    if request.method == 'POST':
+        customer.name = request.form['name']
+        customer.phone = request.form.get('phone')
+        customer.location = request.form.get('location')
+        customer.notes = request.form.get('notes')
+        
+        db.session.commit()
+        flash(f'Customer {customer.name} updated successfully!', 'success')
+        return redirect(url_for('settings'))
+        
+    return render_template('edit_customer.html', customer=customer)
 
 @app.route('/settings/toggle/<type>/<int:id>')
 def toggle_active(type, id):
