@@ -1,0 +1,54 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="card shadow-sm border-0">
+    <div class="card-body">
+        <h2 class="mb-4">Ledger / Transaction History</h2>
+        
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>Date</th>
+                        <th>Type</th>
+                        <th>Description</th>
+                        <th>Business Unit</th>
+                        <th class="text-end">Amount</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for t in transactions %}
+                    <tr class="{% if t.is_voided %}opacity-50 bg-light text-decoration-line-through{% endif %}">
+                        <td>{{ t.date.strftime('%Y-%m-%d') }}</td>
+                        <td>
+                            {% if t.type == 'Sale' %}<span class="badge bg-primary">Sale</span>{% endif %}
+                            {% if t.type == 'Payment' %}<span class="badge bg-success">Payment</span>{% endif %}
+                            {% if t.type == 'Expense' %}<span class="badge bg-danger">Expense</span>{% endif %}
+                        </td>
+                        <td>{{ t.desc }}</td>
+                        <td>{{ t.business }}</td>
+                        <td class="text-end fw-bold 
+                            {% if t.type == 'Payment' %}text-success{% endif %}
+                            {% if t.type == 'Expense' %}text-danger{% endif %}">
+                            {% if t.type == 'Expense' %}-{% else %}+{% endif %}${{ "%.2f"|format(t.amount) }}
+                        </td>
+                        <td class="text-end">
+                            {% if not t.is_voided %}
+                            <a href="/ledger/void/{{ t.type }}/{{ t.id }}" 
+                               class="btn btn-sm btn-outline-danger" 
+                               onclick="return confirm('Are you sure you want to void this transaction? It will be removed from financial totals.')">
+                               Void
+                            </a>
+                            {% else %}
+                            <span class="text-muted small fw-bold">VOIDED</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+    </div>
+</div>
+{% endblock %}
