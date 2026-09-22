@@ -1,0 +1,144 @@
+{% extends 'base.html' %}
+
+{% macro money(v) -%}
+  {%- if v < 0 %}−{% endif %}${{ "{:,.2f}".format(v|abs) }}
+{%- endmacro %}
+
+{% block content %}
+<div class="page-head">
+  <h1 class="panel-title">Analytics</h1>
+  <form class="period-form" method="GET">
+    <label for="date_filter">Showing</label>
+    <select id="date_filter" name="date_filter" class="form-select form-select-sm w-auto" onchange="this.form.submit()">
+      <option value="this_month" {% if filter_type == 'this_month' %}selected{% endif %}>This month</option>
+      <option value="last_month" {% if filter_type == 'last_month' %}selected{% endif %}>Last month</option>
+      <option value="this_year" {% if filter_type == 'this_year' %}selected{% endif %}>This year</option>
+      <option value="all_time" {% if filter_type == 'all_time' %}selected{% endif %}>All time</option>
+    </select>
+  </form>
+</div>
+
+<h2 class="section-title">Whole farm</h2>
+<div class="measure">
+  <table class="ledger">
+    <caption class="visually-hidden">Revenue, expenses and estimated profit for the whole farm</caption>
+    <tbody>
+      <tr class="ledger-head">
+        <th scope="row">Revenue</th>
+        <td>{{ money(farm_revenue) }}</td>
+      </tr>
+      <tr class="ledger-head">
+        <th scope="row">Expenses</th>
+        <td>{{ money(farm_expenses) }}</td>
+      </tr>
+      <tr class="ledger-total{% if farm_profit < 0 %} ledger-loss{% endif %}">
+        <th scope="row">
+          Estimated profit
+          {% if farm_margin == 'N/A' %}
+            <span class="ledger-note">Profit margin not available</span>
+          {% else %}
+            <span class="ledger-note">Profit margin: {{ "{:.1f}".format(farm_margin) }}%</span>
+          {% endif %}
+        </th>
+        <td>{{ money(farm_profit) }}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<h2 class="section-title">Each product</h2>
+{% if performance %}
+<table class="units">
+  <caption class="visually-hidden">Sales, revenue, direct expenses and estimated profit for each product</caption>
+  <thead>
+    <tr>
+      <th scope="col">Product</th>
+      <th scope="col">Sales</th>
+      <th scope="col">Revenue</th>
+      <th scope="col">Direct expenses</th>
+      <th scope="col">Estimated profit</th>
+      <th scope="col">Margin</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for p in performance %}
+    <tr>
+      <th scope="row">{{ p.name }}</th>
+      <td data-label="Sales">{{ p.count }}</td>
+      <td data-label="Revenue">{{ money(p.revenue) }}</td>
+      <td data-label="Direct expenses">{{ money(p.costs) }}</td>
+      <td data-label="Estimated profit" class="profit{% if p.profit < 0 %} is-loss{% endif %}">{{ money(p.profit) }}</td>
+      <td data-label="Margin"{% if p.margin != 'N/A' and p.margin < 0 %} class="is-loss"{% endif %}>
+        {% if p.margin == 'N/A' %}—{% else %}{{ "{:.1f}".format(p.margin) }}%{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+<p class="table-note">
+  Product profits leave out shared farm expenses. Those are only taken off in the whole-farm total above.
+</p>
+{% else %}
+<p class="empty-note">No products yet. <a href="/settings">Add one in Settings</a>, then record sales and expenses against it.</p>
+{% endif %}
+
+<div class="row g-4 mt-1">
+  <div class="col-md-6">
+    <div class="section-title-row">
+      <h2 class="section-title">Expenses by category</h2>
+      <span class="section-total">{{ money(farm_expenses) }} total</span>
+    </div>
+
+    {% if expenses_by_category or farm_shared %}
+    <table class="ledger ledger-quiet">
+      <caption class="visually-hidden">Expenses broken down by category, for the selected period</caption>
+      <tbody>
+        <tr>
+          <th scope="row">Shared farm expenses</th>
+          <td>{{ money(farm_shared) }}</td>
+        </tr>
+        {% for cat, amt in expenses_by_category %}
+        <tr>
+          <th scope="row">{{ cat }}</th>
+          <td>{{ money(amt) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="empty-note">No expenses recorded for this period.</p>
+    {% endif %}
+  </div>
+
+  <div class="col-md-6">
+    <div class="section-title-row">
+      <h2 class="section-title">Credit overview</h2>
+    </div>
+    <p class="form-text mb-3">Outstanding customer balances, across all time.</p>
+
+    {% if customer_analytics %}
+    <table class="units">
+      <caption class="visually-hidden">Customers with an outstanding balance, and their last payment</caption>
+      <thead>
+        <tr>
+          <th scope="col">Customer</th>
+          <th scope="col">Last payment</th>
+          <th scope="col">Owes</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in customer_analytics %}
+        <tr>
+          <th scope="row">{{ c.name }}</th>
+          <td data-label="Last payment">{% if c.recent_payment %}{{ c.recent_payment.strftime('%d %b %Y') }}{% else %}Never{% endif %}</td>
+          <td data-label="Owes" class="is-owing">{{ money(c.balance) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="empty-note">No customers currently owe money.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

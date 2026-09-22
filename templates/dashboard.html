@@ -5,45 +5,66 @@
 {%- endmacro %}
 
 {% block content %}
+<div class="page-head">
+  <h1 class="panel-title">Dashboard</h1>
+  <form class="period-form" method="GET">
+    <label for="date_filter">Showing</label>
+    <select id="date_filter" name="date_filter" class="form-select form-select-sm w-auto" onchange="this.form.submit()">
+      <option value="today" {% if filter_type == 'today' %}selected{% endif %}>Today</option>
+      <option value="this_week" {% if filter_type == 'this_week' %}selected{% endif %}>This week</option>
+      <option value="this_month" {% if filter_type == 'this_month' %}selected{% endif %}>This month</option>
+      <option value="last_month" {% if filter_type == 'last_month' %}selected{% endif %}>Last month</option>
+      <option value="this_year" {% if filter_type == 'this_year' %}selected{% endif %}>This year</option>
+      <option value="all_time" {% if filter_type == 'all_time' %}selected{% endif %}>All time</option>
+    </select>
+  </form>
+</div>
+
 <div class="row g-4">
-
   <div class="col-md-8">
-    <h1 class="panel-title">Farm finances</h1>
-
     <table class="ledger">
-      <caption class="visually-hidden">Sales, expenses and estimated profit</caption>
+      <caption class="visually-hidden">Revenue, expenses and estimated profit for the selected period</caption>
       <tbody>
         <tr class="ledger-head">
-          <th scope="row">Total sales</th>
-          <td>{{ money(sales) }}</td>
+          <th scope="row">Revenue</th>
+          <td>{{ money(revenue) }}</td>
         </tr>
-        <tr class="ledger-part">
+        <tr class="ledger-part ledger-part-last">
           <th scope="row">Cash received</th>
           <td>{{ money(cash) }}</td>
         </tr>
-        <tr class="ledger-part ledger-part-last ledger-owed">
-          <th scope="row">
-            Customers still owe us
-            <span class="ledger-note">Unpaid credit sales</span>
-          </th>
-          <td>{{ money(debt) }}</td>
-        </tr>
-        <tr>
-          <th scope="row">
-            Total expenses
-            <span class="ledger-note">Money spent</span>
-          </th>
+
+        <tr class="ledger-head">
+          <th scope="row">Expenses</th>
           <td>{{ money(expenses) }}</td>
         </tr>
+
         <tr class="ledger-total{% if profit < 0 %} ledger-loss{% endif %}">
           <th scope="row">
             Estimated profit
-            <span class="ledger-note">Sales minus expenses</span>
+            <span class="ledger-note">Revenue minus expenses, for this period</span>
+            {% if margin != 'N/A' %}
+              <span class="ledger-note">Profit margin: {{ "{:.1f}".format(margin) }}%</span>
+            {% endif %}
           </th>
           <td>{{ money(profit) }}</td>
         </tr>
       </tbody>
     </table>
+
+    <p class="aside-note">
+      Customers owe <strong>{{ money(debt) }}</strong> in total, across all time.
+      <a href="/payments/new">Record a payment</a>
+    </p>
+
+    <div class="chart-panel">
+      <h2 class="section-title">Financial trends</h2>
+      {% if chart_labels %}
+        <canvas id="trendChart" height="100"></canvas>
+      {% else %}
+        <p class="empty-note">No data for the selected period.</p>
+      {% endif %}
+    </div>
   </div>
 
   <div class="col-md-4">
@@ -53,8 +74,44 @@
       <a href="/expenses/new" class="action">Record an expense</a>
       <a href="/payments/new" class="action">Record a customer payment</a>
     </nav>
-    <a href="/profitability" class="view-link">View profitability</a>
+    <a href="/analytics" class="view-link">View analytics</a>
   </div>
-
 </div>
+
+{% if chart_labels %}
+<script>
+    const ctx = document.getElementById('trendChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: {{ chart_labels | tojson }},
+            datasets: [
+                {
+                    label: 'Revenue',
+                    data: {{ chart_rev | tojson }},
+                    borderColor: '#2F5D3A',
+                    backgroundColor: 'rgba(47, 93, 58, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.3
+                },
+                {
+                    label: 'Expenses',
+                    data: {{ chart_exp | tojson }},
+                    borderColor: '#A33A2B',
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    fill: false,
+                    tension: 0.3
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { position: 'bottom' } },
+            scales: { y: { ticks: { callback: (v) => '$' + v.toLocaleString() } } }
+        }
+    });
+</script>
+{% endif %}
 {% endblock %}

@@ -3,9 +3,43 @@
 {% block content %}
 <h1 class="panel-title">Ledger</h1>
 
+<form method="GET" class="toolbar">
+  <div class="toolbar-field">
+    <label for="date_filter">Date range</label>
+    <select id="date_filter" name="date_filter" class="form-select">
+      <option value="this_month" {% if filter_type == 'this_month' %}selected{% endif %}>This month</option>
+      <option value="last_month" {% if filter_type == 'last_month' %}selected{% endif %}>Last month</option>
+      <option value="this_year" {% if filter_type == 'this_year' %}selected{% endif %}>This year</option>
+      <option value="all_time" {% if filter_type == 'all_time' %}selected{% endif %}>All time</option>
+    </select>
+  </div>
+
+  <div class="toolbar-field">
+    <label for="type">Type</label>
+    <select id="type" name="type" class="form-select">
+      <option value="">All transactions</option>
+      <option value="Sale" {% if type_filter == 'Sale' %}selected{% endif %}>Sales only</option>
+      <option value="Expense" {% if type_filter == 'Expense' %}selected{% endif %}>Expenses only</option>
+      <option value="Payment" {% if type_filter == 'Payment' %}selected{% endif %}>Payments only</option>
+    </select>
+  </div>
+
+  <div class="toolbar-field">
+    <label for="unit_id">Product</label>
+    <select id="unit_id" name="unit_id" class="form-select">
+      <option value="">All products</option>
+      {% for u in units %}
+        <option value="{{ u.id }}" {% if unit_id_filter|string == u.id|string %}selected{% endif %}>{{ u.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <button type="submit" class="btn btn-primary">Apply filters</button>
+</form>
+
 {% if transactions %}
 <table class="entries">
-  <caption class="visually-hidden">Every sale, payment and expense, newest first</caption>
+  <caption class="visually-hidden">Every sale, payment and expense matching the current filters, newest first</caption>
   <thead>
     <tr>
       <th scope="col" class="e-date">Date</th>
@@ -37,8 +71,6 @@
   </tbody>
 </table>
 {% else %}
-<p class="empty-note">
-  Nothing recorded yet. <a href="/sales/new">Record a sale</a> or <a href="/expenses/new">record an expense</a> and it will show up here.
-</p>
+<p class="empty-note">No transactions found for these filters.</p>
 {% endif %}
 {% endblock %}

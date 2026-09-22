@@ -3,28 +3,28 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Farm Business Manager</title>
+    <title>Refactored Potato | Farm Management</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/farm.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
     <header class="site-header">
         <div class="container site-header-inner">
-            <!-- Swap this for your farm's actual name -->
-            <a class="brand" href="/">Farm Manager</a>
+            <a class="brand" href="/">Refactored Potato</a>
             <nav class="site-nav" aria-label="Main">
                 <a href="/" {% if request.path == '/' %}aria-current="page"{% endif %}>Dashboard</a>
+                <a href="/analytics" {% if request.path.startswith('/analytics') %}aria-current="page"{% endif %}>Analytics</a>
                 <a href="/ledger" {% if request.path.startswith('/ledger') %}aria-current="page"{% endif %}>Ledger</a>
-                <a href="/profitability" {% if request.path.startswith('/profitability') %}aria-current="page"{% endif %}>Profitability</a>
                 <a href="/settings" {% if request.path.startswith('/settings') %}aria-current="page"{% endif %}>Settings</a>
             </nav>
         </div>
     </header>
 
-    <main class="container">
+    <main class="container pb-5">
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% for category, message in messages %}
                 <div class="flash flash-{{ category }}" role="status">{{ message }}</div>

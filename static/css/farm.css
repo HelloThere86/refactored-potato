@@ -312,6 +312,15 @@ body {
   padding: 0.6rem 0.75rem;
 }
 
+/* Selects need extra right padding so text never sits under the arrow icon */
+.form-select {
+  padding-right: 2.5rem;
+}
+
+.form-select-sm {
+  padding-right: 2.25rem;
+}
+
 .form-control:focus,
 .form-select:focus {
   border-color: var(--field);
@@ -439,6 +448,11 @@ body {
 
 .units td.is-loss {
   color: var(--loss);
+}
+
+.units td.is-owing {
+  color: var(--owed);
+  font-weight: 700;
 }
 
 .units tbody tr:last-child > * {
@@ -835,4 +849,117 @@ body {
   .entries .e-type    { grid-column: 2;     grid-row: 2; color: var(--muted); font-size: 0.9375rem; }
   .entries .e-product { grid-column: 3;     grid-row: 2; color: var(--muted); font-size: 0.9375rem; }
   .entries .e-action  { grid-column: 4;     grid-row: 2; font-size: 0.9375rem; }
+}
+
+/* ---------- Page headers with a period filter ---------- */
+
+.page-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.page-head .panel-title {
+  margin-bottom: 0;
+}
+
+.period-form {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.period-form label {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9375rem;
+}
+
+/* ---------- Filter toolbar (ledger page) ---------- */
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 1rem 1.25rem;
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+}
+
+.toolbar-field {
+  display: flex;
+  flex: 1 1 10rem;
+  min-width: 9rem;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.toolbar-field label {
+  color: var(--muted);
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.toolbar .btn {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 575.98px) {
+  .toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .toolbar .btn {
+    width: 100%;
+  }
+}
+
+/* ---------- Aside note under a ledger (e.g. all-time balances) ---------- */
+
+.aside-note {
+  margin: 1rem 0 0;
+  color: var(--muted);
+}
+
+.aside-note strong {
+  color: var(--ink);
+}
+
+/* ---------- Chart panel ---------- */
+
+.chart-panel {
+  padding: 1.25rem 1.5rem 1.5rem;
+  margin-top: 1.5rem;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+}
+
+.chart-panel .section-title {
+  margin-top: 0;
+}
+
+/* ---------- Section title with a trailing total ---------- */
+
+.section-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+}
+
+.section-title-row .section-title {
+  margin: 0;
+}
+
+.section-total {
+  color: var(--muted);
+  font-weight: 700;
 }
