@@ -2,18 +2,76 @@ from flask import Flask, render_template, request, redirect, url_for, flash, sen
 from models import db, BusinessUnit, Customer, Sale, Payment, Expense
 from datetime import datetime, timedelta
 import os
+import sys
 import sqlite3
 import tempfile
 import io
 import csv
+import threading
+import time
+import signal
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
-app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///farm.db'
-app.config['SECRET_KEY'] = 'super-secret-key-change-in-production'
+# ==========================================
+# V1.3.3: PATH RESOLUTION & USER DATA DIRECTORY
+# ==========================================
+def get_bundle_dir():
+    """Returns the base directory containing templates and assets."""
+    if getattr(sys, 'frozen', False):
+        if hasattr(sys, '_MEIPASS'):
+            return sys._MEIPASS
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
+def get_user_data_dir():
+    """Returns the persistent, writable directory for user database and safety backups."""
+    env_override = os.environ.get('REFACTORED_POTATO_DATA_DIR')
+    if env_override:
+        os.makedirs(env_override, exist_ok=True)
+        return env_override
+
+    if sys.platform == 'win32':
+        base = os.environ.get('LOCALAPPDATA') or os.path.expanduser('~\\AppData\\Local')
+        data_dir = os.path.join(base, 'RefactoredPotato')
+    else:
+        data_dir = os.path.expanduser('~/.refactored_potato')
+
+    os.makedirs(data_dir, exist_ok=True)
+    return data_dir
+
+def get_db_path():
+    """Returns the absolute path to the active SQLite database."""
+    return os.path.join(get_user_data_dir(), 'farm.db')
+
+# Initialize Flask with explicit bundle directories
+bundle_dir = get_bundle_dir()
+template_dir = os.path.join(bundle_dir, 'templates')
+static_dir = os.path.join(bundle_dir, 'static')
+
+app = Flask(__name__, template_folder=template_dir, static_folder=static_dir)
+
+# Resolve database URI to persistent user data location
+active_db_path = get_db_path()
+clean_db_path = active_db_path.replace('\\', '/')
+app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{clean_db_path}"
+app.config['SECRET_KEY'] = 'refactored-potato-production-secret-key-v1-3-3'
 db.init_app(app)
+
+def init_db(app_instance=None):
+    """Initializes the database schema safely without overwriting existing data."""
+    target_app = app_instance or app
+    with target_app.app_context():
+        db.create_all()
+        # On clean first-run, initialize default product units if database is brand new
+        if not BusinessUnit.query.first():
+            db.session.add_all([
+                BusinessUnit(name="Fancy Lettuce"),
+                BusinessUnit(name="Iceberg Lettuce"),
+                BusinessUnit(name="Celery"),
+            ])
+            db.session.commit()
 
 # ==========================================
 # V1.3.1: BACKUP & RESTORE ENGINE
@@ -120,8 +178,9 @@ def restore_backup():
         flash(f'Restore aborted. {msg}', 'danger')
         return redirect(url_for('settings'))
         
+    # V1.3.3: Safety snapshot stored in user data directory, not installation folder
     safety_filename = f"farm_safety_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
-    safety_path = os.path.join(app.root_path, safety_filename)
+    safety_path = os.path.join(get_user_data_dir(), safety_filename)
     try:
         create_backup_to_file(safety_path)
     except Exception as e:
@@ -142,6 +201,25 @@ def restore_backup():
         os.remove(temp_path)
         
     return redirect(url_for('settings'))
+
+# ==========================================
+# V1.3.3: LIFECYCLE, HEALTH & SHUTDOWN ROUTES
+# ==========================================
+@app.route('/api/health')
+def health_check():
+    """Used by the desktop launcher to detect an already running instance."""
+    return {"status": "ok", "app": "Refactored Potato", "version": "1.3.3"}, 200
+
+@app.route('/shutdown', methods=['POST'])
+def shutdown():
+    """Allows nontechnical users to shut down the background server cleanly."""
+    def terminate_process():
+        time.sleep(0.8)
+        # Attempt graceful termination of current process
+        os.kill(os.getpid(), signal.SIGTERM if hasattr(signal, 'SIGTERM') else signal.SIGINT)
+
+    threading.Thread(target=terminate_process, daemon=True).start()
+    return render_template('shutdown.html')
 
 # ==========================================
 # UTILITY: DATE FILTERING
@@ -217,7 +295,6 @@ def get_export_queries(start_date, end_date, unit_id_filter=None):
     if unit_id_filter:
         sales_q = sales_q.filter_by(unit_id=unit_id_filter)
         expenses_q = expenses_q.filter(Expense.allocated_units.any(id=unit_id_filter))
-        # Note: Payments belong to customers and are not tied to business units
 
     return sales_q, expenses_q, payments_q
 
@@ -298,7 +375,6 @@ def export_csv(dataset):
         filename = f"payments_export_{timestamp}.csv"
 
     elif dataset == 'customer_balances':
-        # Customer balances are strictly ALL-TIME
         writer.writerow(['Customer ID', 'Customer Name', 'Phone', 'Location', 'Status', 'All-Time Sales ($)', 'All-Time Payments ($)', 'Current Outstanding Balance ($)'])
         customers = Customer.query.order_by(Customer.name).all()
         for c in customers:
@@ -347,7 +423,6 @@ def export_csv(dataset):
         flash("Invalid export dataset selected.", "danger")
         return redirect(url_for('export_hub'))
 
-   # Deliver with UTF-8 BOM so spreadsheet engines recognize accents and currency symbols
     bytes_data = output.getvalue().encode('utf-8-sig')
     return Response(
         bytes_data,
@@ -362,7 +437,6 @@ def export_excel():
     sales_q, expenses_q, payments_q = get_export_queries(start_date, end_date, unit_id_filter)
 
     wb = openpyxl.Workbook()
-    # Remove default sheet
     wb.remove(wb.active)
 
     header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
@@ -381,7 +455,7 @@ def export_excel():
         ws.cell(1, 1).font = Font(name="Calibri", size=14, bold=True, color="1E392A")
         ws.append([meta_text])
         ws.cell(2, 1).font = meta_font
-        ws.append([]) # Blank spacer
+        ws.append([])
 
         ws.append(headers)
         header_row_idx = 4
@@ -397,21 +471,19 @@ def export_excel():
             for c_idx in range(1, len(r_data) + 1):
                 c = ws.cell(row=current_row, column=c_idx)
                 c.border = thin_border
-                # Right align numbers
                 if isinstance(r_data[c_idx - 1], (int, float)):
                     c.number_format = '#,##0.00'
                     c.alignment = Alignment(horizontal="right")
 
         ws.freeze_panes = f"A{header_row_idx + 1}"
 
-        # Adjust column widths dynamically
         for col in ws.columns:
             max_len = 0
             col_letter = get_column_letter(col[0].column)
             for cell in col:
                 val = str(cell.value or '')
                 if cell.row < 3:
-                    continue # Do not size by metadata headers
+                    continue
                 if len(val) > max_len:
                     max_len = len(val)
             ws.column_dimensions[col_letter].width = max(max_len + 3, 12)
@@ -472,7 +544,7 @@ def export_excel():
         ])
     style_sheet(wb.create_sheet(), "Payments", f"{date_label} | Note: Customer payments represent cash received, not additional revenue.", pmt_headers, pmt_rows)
 
-    # 4. Customer Balances Sheet (ALL-TIME)
+    # 4. Customer Balances Sheet
     cust_headers = ['Customer ID', 'Customer Name', 'Phone', 'Location', 'Status', 'All-Time Sales ($)', 'All-Time Payments ($)', 'Current Balance ($)']
     cust_rows = []
     customers = Customer.query.order_by(Customer.name).all()
@@ -801,7 +873,11 @@ def settings():
     customers = Customer.query.all()
     for c in customers: c.balance = get_customer_balance(c.id)
     units = BusinessUnit.query.all()
-    return render_template('settings.html', customers=customers, units=units)
+    return render_template('settings.html',
+                           customers=customers,
+                           units=units,
+                           db_path=get_db_path(),
+                           data_dir=get_user_data_dir())
 
 @app.route('/settings/edit_customer/<int:id>', methods=['GET', 'POST'])
 def edit_customer(id):
@@ -835,6 +911,5 @@ def void_transaction(type, id):
     return redirect(url_for('ledger'))
 
 if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
+    init_db(app)
     app.run(debug=True, port=5000)

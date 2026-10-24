@@ -108,9 +108,22 @@
 
 </div>
 
-<!-- Backup and restore -->
+<!-- Data protection -->
 <section class="mt-5" aria-labelledby="backup-heading">
-  <h2 class="section-title" id="backup-heading">Backup and restore</h2>
+  <div class="section-head-row">
+    <h2 class="section-title" id="backup-heading">Data protection</h2>
+    <form action="/shutdown" method="POST" onsubmit="return confirm('Are you sure you want to stop Refactored Potato?');">
+      <button type="submit" class="btn btn-outline-secondary btn-sm">Exit application</button>
+    </form>
+  </div>
+
+  <div class="storage-panel">
+    <h3>Where your records are stored</h3>
+    <code class="storage-path">{{ db_path }}</code>
+    <p class="form-text mb-0">
+      Your records and safety backups live in your personal user directory. Application upgrades will never overwrite your farm database.
+    </p>
+  </div>
 
   <div class="row g-4">
     <div class="col-md-6">
@@ -130,10 +143,10 @@
         <h3 class="section-title">Restore from a backup</h3>
         <p class="form-text mb-2">Upload a previously saved backup file to restore your farm's records.</p>
         <p class="notice notice-warning">
-          <strong>Warning:</strong> this replaces your current records. Anything entered after the backup was made will be lost.
+          <strong>Warning:</strong> this replaces your current records. A safety backup of what you have now is created automatically first.
         </p>
         <form action="/backup/restore" method="POST" enctype="multipart/form-data"
-              onsubmit="return confirm('Are you sure you want to replace your current records with this backup file? This cannot be easily undone.');">
+              onsubmit="return confirm('Are you sure you want to replace your current records with this backup file?');">
           <label class="form-label" for="backup_file">Backup file</label>
           <div class="input-group">
             <input type="file" id="backup_file" name="backup_file" class="form-control" accept=".db" required>

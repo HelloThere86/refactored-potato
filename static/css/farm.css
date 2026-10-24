@@ -1140,3 +1140,76 @@ body {
     flex-shrink: 0;
   }
 }
+
+/* ---------- Settings: storage info row ---------- */
+
+.section-head-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1.5rem;
+  padding-bottom: 0.5rem;
+  margin-bottom: 1.25rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+.section-head-row .section-title {
+  margin: 0;
+}
+
+.storage-panel {
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1.5rem;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+}
+
+.storage-panel h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.storage-path {
+  display: block;
+  padding: 0.6rem 0.85rem;
+  margin-bottom: 0.65rem;
+  background: var(--ground);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  color: var(--ink);
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
+/* ---------- Status page (e.g. "application stopped") ---------- */
+
+.status-panel {
+  max-width: 30rem;
+  margin: 3rem auto 0;
+  padding: 2.25rem 2rem;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  text-align: center;
+}
+
+.status-panel .panel-title {
+  margin-bottom: 0.75rem;
+}
+
+.status-panel p {
+  color: var(--muted);
+}
+
+.status-panel .notice {
+  margin-top: 1.25rem;
+  text-align: left;
+}
+
+.status-panel .form-text {
+  margin-top: 1.25rem;
+  margin-bottom: 0;
+}
