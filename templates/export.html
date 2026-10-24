@@ -1,0 +1,98 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h1 class="panel-title">Exports</h1>
+<p class="form-lede">Export your farm records for spreadsheet analysis, tax reporting, or off-site accounting.</p>
+
+<form method="GET" action="/export" class="toolbar">
+  <div class="toolbar-field">
+    <label for="date_filter">Reporting period</label>
+    <select id="date_filter" name="date_filter" class="form-select" onchange="this.form.submit()">
+      <option value="today" {% if filter_type == 'today' %}selected{% endif %}>Today</option>
+      <option value="this_week" {% if filter_type == 'this_week' %}selected{% endif %}>This week</option>
+      <option value="this_month" {% if filter_type == 'this_month' %}selected{% endif %}>This month</option>
+      <option value="last_month" {% if filter_type == 'last_month' %}selected{% endif %}>Last month</option>
+      <option value="this_year" {% if filter_type == 'this_year' %}selected{% endif %}>This year</option>
+      <option value="all_time" {% if filter_type == 'all_time' %}selected{% endif %}>All time</option>
+    </select>
+  </div>
+  <div class="toolbar-field">
+    <label for="unit_id">Product</label>
+    <select id="unit_id" name="unit_id" class="form-select" onchange="this.form.submit()">
+      <option value="">All products</option>
+      {% for u in units %}
+      <option value="{{ u.id }}" {% if unit_id_filter|string == u.id|string %}selected{% endif %}>{{ u.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+</form>
+<p class="form-text mb-4">
+  Customer balances are always all-time totals, whatever period is selected above.
+</p>
+
+<div class="export-featured">
+  <div>
+    <h3>Comprehensive Excel workbook (.xlsx)</h3>
+    <p>
+      Five worksheets &mdash; Sales, Expenses, Payments, Customer Balances, and Product Summary &mdash;
+      with frozen header rows and currency formatting already applied.
+    </p>
+  </div>
+  <a href="/export/excel?date_filter={{ filter_type }}&unit_id={{ unit_id_filter or '' }}" class="btn btn-primary btn-lg">
+    Download Excel (.xlsx)
+  </a>
+</div>
+
+<h2 class="section-title">Individual CSV exports</h2>
+<div class="row g-4">
+  <div class="col-md-4">
+    <div class="export-panel">
+      <h3>Sales records</h3>
+      <p>Every sale with date, customer, product, volume, unit price, void status, and notes.</p>
+      <a href="/export/csv/sales?date_filter={{ filter_type }}&unit_id={{ unit_id_filter or '' }}" class="btn btn-outline-primary">
+        Download sales CSV
+      </a>
+    </div>
+  </div>
+
+  <div class="col-md-4">
+    <div class="export-panel">
+      <h3>Expense records</h3>
+      <p>Every expense with its scope &mdash; one product, a few products, farm-wide, or unallocated &mdash; and its full allocation.</p>
+      <a href="/export/csv/expenses?date_filter={{ filter_type }}&unit_id={{ unit_id_filter or '' }}" class="btn btn-outline-primary">
+        Download expenses CSV
+      </a>
+    </div>
+  </div>
+
+  <div class="col-md-4">
+    <div class="export-panel">
+      <h3>Customer payments</h3>
+      <p>Cash settlements and payment receipts. Payments are credited to a customer's account, not to a single product.</p>
+      <a href="/export/csv/payments?date_filter={{ filter_type }}" class="btn btn-outline-primary">
+        Download payments CSV
+      </a>
+    </div>
+  </div>
+
+  <div class="col-md-6">
+    <div class="export-panel">
+      <h3>Customer outstanding balances</h3>
+      <p>Lifetime sales, payments, and current balance owed for every customer, active or archived.</p>
+      <a href="/export/csv/customer_balances" class="btn btn-outline-secondary">
+        Download balances CSV (all-time)
+      </a>
+    </div>
+  </div>
+
+  <div class="col-md-6">
+    <div class="export-panel">
+      <h3>Product performance summary</h3>
+      <p>Revenue, direct expenses, estimated profit, margin, and the shared expenses to refer to for each product in the period.</p>
+      <a href="/export/csv/business_summaries?date_filter={{ filter_type }}" class="btn btn-outline-secondary">
+        Download summary CSV
+      </a>
+    </div>
+  </div>
+</div>
+{% endblock %}

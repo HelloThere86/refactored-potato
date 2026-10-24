@@ -1,9 +1,14 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, send_file, after_this_request
+from flask import Flask, render_template, request, redirect, url_for, flash, send_file, after_this_request, Response
 from models import db, BusinessUnit, Customer, Sale, Payment, Expense
 from datetime import datetime, timedelta
 import os
 import sqlite3
 import tempfile
+import io
+import csv
+import openpyxl
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///farm.db'
@@ -28,11 +33,10 @@ def create_backup_to_file(target_path):
             source_conn.backup(target_conn)
         target_conn.close()
     finally:
-        raw_conn_proxy.close() # Return connection to pool
+        raw_conn_proxy.close()
 
 def restore_backup_from_file(source_path):
     """Replaces the live database with a backup file safely."""
-    # Flush active SQLAlchemy connections to release file locks
     db.session.remove()
     db.engine.dispose()
     
@@ -52,13 +56,11 @@ def validate_backup(db_path):
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         
-        # 1. Internal SQLite corruption check
         cursor.execute("PRAGMA integrity_check;")
         result = cursor.fetchone()
         if not result or result[0].lower() != "ok":
             return False, "Database integrity check failed. File may be corrupted."
         
-        # 2. V1.2 Schema verification
         required_tables = {'business_unit', 'customer', 'sale', 'payment', 'expense', 'expense_allocations'}
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
         tables = {row[0].lower() for row in cursor.fetchall()}
@@ -70,7 +72,6 @@ def validate_backup(db_path):
     except Exception as e:
         return False, f"Not a valid SQLite database file. Error: {str(e)}"
     finally:
-        # Guarantee the connection is closed so Windows can release the file lock
         if conn:
             conn.close()
 
@@ -82,7 +83,6 @@ def download_backup():
     try:
         create_backup_to_file(temp_path)
         
-        # Ensure the temp file is deleted after the user downloads it
         @after_this_request
         def remove_file(response):
             try:
@@ -114,14 +114,12 @@ def restore_backup():
     os.close(fd)
     file.save(temp_path)
     
-    # 1. Validate
     is_valid, msg = validate_backup(temp_path)
     if not is_valid:
         os.remove(temp_path)
         flash(f'Restore aborted. {msg}', 'danger')
         return redirect(url_for('settings'))
         
-    # 2. Safety Backup
     safety_filename = f"farm_safety_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
     safety_path = os.path.join(app.root_path, safety_filename)
     try:
@@ -131,12 +129,10 @@ def restore_backup():
         flash(f'Failed to create local safety backup. Restore aborted to protect data. Error: {str(e)}', 'danger')
         return redirect(url_for('settings'))
         
-    # 3. Perform Restore
     try:
         restore_backup_from_file(temp_path)
         flash('Database restored successfully! All records have been updated.', 'success')
     except Exception as e:
-        # Attempt Emergency Recovery
         try:
             restore_backup_from_file(safety_path)
             flash(f'Restore failed, but your database was safely recovered from the safety backup. Error: {str(e)}', 'warning')
@@ -199,6 +195,341 @@ def get_total_outstanding_credit():
     total_sales = db.session.query(db.func.sum(Sale.total_amount)).filter_by(is_voided=False).scalar() or 0
     total_payments = db.session.query(db.func.sum(Payment.amount)).filter_by(is_voided=False).scalar() or 0
     return total_sales - total_payments
+
+# ==========================================
+# V1.3.2: EXPORT ENGINE & SANITIZATION
+# ==========================================
+def sanitize_for_spreadsheet(value):
+    """Prevents CSV and Excel formula injection (starting with =, +, -, @, tab, CR)."""
+    if value is None:
+        return ""
+    str_val = str(value)
+    if str_val and str_val[0] in ('=', '+', '-', '@', '\t', '\r'):
+        return f"'{str_val}"
+    return str_val
+
+def get_export_queries(start_date, end_date, unit_id_filter=None):
+    """Fetches core datasets respecting date filters and unit filters."""
+    sales_q = apply_date_filter(Sale.query, Sale, start_date, end_date)
+    expenses_q = apply_date_filter(Expense.query, Expense, start_date, end_date)
+    payments_q = apply_date_filter(Payment.query, Payment, start_date, end_date)
+
+    if unit_id_filter:
+        sales_q = sales_q.filter_by(unit_id=unit_id_filter)
+        expenses_q = expenses_q.filter(Expense.allocated_units.any(id=unit_id_filter))
+        # Note: Payments belong to customers and are not tied to business units
+
+    return sales_q, expenses_q, payments_q
+
+@app.route('/export')
+def export_hub():
+    filter_type, start_date, end_date = parse_date_filter(request)
+    unit_id_filter = request.args.get('unit_id')
+    units = BusinessUnit.query.filter_by(is_active=True).all()
+    
+    return render_template('export.html',
+                           filter_type=filter_type,
+                           start_date=start_date,
+                           end_date=end_date,
+                           unit_id_filter=unit_id_filter,
+                           units=units)
+
+@app.route('/export/csv/<dataset>')
+def export_csv(dataset):
+    filter_type, start_date, end_date = parse_date_filter(request)
+    unit_id_filter = request.args.get('unit_id')
+    sales_q, expenses_q, payments_q = get_export_queries(start_date, end_date, unit_id_filter)
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    timestamp = datetime.utcnow().strftime('%Y-%m-%d_%H%M')
+
+    if dataset == 'sales':
+        writer.writerow(['Sale ID', 'Date', 'Customer', 'Product / Business Unit', 'Quantity', 'Unit Price ($)', 'Total Amount ($)', 'Status', 'Notes'])
+        for s in sales_q.order_by(Sale.date.desc()).all():
+            writer.writerow([
+                s.id,
+                s.date.strftime('%Y-%m-%d %H:%M'),
+                sanitize_for_spreadsheet(s.customer.name if s.customer else 'Unknown'),
+                sanitize_for_spreadsheet(s.business_unit.name if s.business_unit else 'Unknown'),
+                f"{s.quantity:.2f}",
+                f"{s.unit_price:.2f}",
+                f"{s.total_amount:.2f}",
+                'VOIDED' if s.is_voided else 'Active',
+                sanitize_for_spreadsheet(s.notes or '')
+            ])
+        filename = f"sales_export_{timestamp}.csv"
+
+    elif dataset == 'expenses':
+        writer.writerow(['Expense ID', 'Date', 'Category', 'Description', 'Scope', 'Allocated Business Units', 'Amount ($)', 'Status'])
+        for e in expenses_q.order_by(Expense.date.desc()).all():
+            if e.scope == 'specific':
+                units_str = e.allocated_units[0].name if e.allocated_units else 'Unassigned'
+            elif e.scope == 'shared':
+                units_str = ", ".join([u.name for u in e.allocated_units])
+            elif e.scope == 'farm':
+                units_str = "Entire Farm"
+            else:
+                units_str = "Unallocated"
+
+            writer.writerow([
+                e.id,
+                e.date.strftime('%Y-%m-%d %H:%M'),
+                sanitize_for_spreadsheet(e.category),
+                sanitize_for_spreadsheet(e.description or ''),
+                e.scope.capitalize(),
+                sanitize_for_spreadsheet(units_str),
+                f"{e.amount:.2f}",
+                'VOIDED' if e.is_voided else 'Active'
+            ])
+        filename = f"expenses_export_{timestamp}.csv"
+
+    elif dataset == 'payments':
+        writer.writerow(['Payment ID', 'Date', 'Customer', 'Amount ($)', 'Status', 'Notes'])
+        for p in payments_q.order_by(Payment.date.desc()).all():
+            writer.writerow([
+                p.id,
+                p.date.strftime('%Y-%m-%d %H:%M'),
+                sanitize_for_spreadsheet(p.customer.name if p.customer else 'Unknown'),
+                f"{p.amount:.2f}",
+                'VOIDED' if p.is_voided else 'Active',
+                sanitize_for_spreadsheet(p.notes or '')
+            ])
+        filename = f"payments_export_{timestamp}.csv"
+
+    elif dataset == 'customer_balances':
+        # Customer balances are strictly ALL-TIME
+        writer.writerow(['Customer ID', 'Customer Name', 'Phone', 'Location', 'Status', 'All-Time Sales ($)', 'All-Time Payments ($)', 'Current Outstanding Balance ($)'])
+        customers = Customer.query.order_by(Customer.name).all()
+        for c in customers:
+            all_sales = db.session.query(db.func.sum(Sale.total_amount)).filter_by(customer_id=c.id, is_voided=False).scalar() or 0.0
+            all_pmts = db.session.query(db.func.sum(Payment.amount)).filter_by(customer_id=c.id, is_voided=False).scalar() or 0.0
+            balance = all_sales - all_pmts
+            writer.writerow([
+                c.id,
+                sanitize_for_spreadsheet(c.name),
+                sanitize_for_spreadsheet(c.phone or ''),
+                sanitize_for_spreadsheet(c.location or ''),
+                'Active' if c.is_active else 'Archived',
+                f"{all_sales:.2f}",
+                f"{all_pmts:.2f}",
+                f"{balance:.2f}"
+            ])
+        filename = f"customer_balances_all_time_{timestamp}.csv"
+
+    elif dataset == 'business_summaries':
+        writer.writerow(['Business Unit', 'Sales Count', 'Revenue ($)', 'Direct Expenses ($)', 'Estimated Direct Profit ($)', 'Direct Margin (%)', 'Shared Expenses Memo ($)'])
+        active_units = BusinessUnit.query.filter_by(is_active=True).all()
+        for unit in active_units:
+            u_sales_q = apply_date_filter(Sale.query.filter_by(unit_id=unit.id, is_voided=False), Sale, start_date, end_date)
+            u_direct_exp_q = apply_date_filter(Expense.query.filter(Expense.allocated_units.any(id=unit.id), Expense.scope == 'specific', Expense.is_voided == False), Expense, start_date, end_date)
+            u_shared_exp_q = apply_date_filter(Expense.query.filter(Expense.allocated_units.any(id=unit.id), Expense.scope == 'shared', Expense.is_voided == False), Expense, start_date, end_date)
+
+            rev = u_sales_q.with_entities(db.func.sum(Sale.total_amount)).scalar() or 0.0
+            direct_costs = u_direct_exp_q.with_entities(db.func.sum(Expense.amount)).scalar() or 0.0
+            shared_memo = u_shared_exp_q.with_entities(db.func.sum(Expense.amount)).scalar() or 0.0
+            profit = rev - direct_costs
+            margin_str = f"{(profit / rev * 100):.1f}" if rev > 0 else 'N/A'
+            count = u_sales_q.count()
+
+            writer.writerow([
+                sanitize_for_spreadsheet(unit.name),
+                count,
+                f"{rev:.2f}",
+                f"{direct_costs:.2f}",
+                f"{profit:.2f}",
+                margin_str,
+                f"{shared_memo:.2f}"
+            ])
+        filename = f"business_unit_summary_{timestamp}.csv"
+
+    else:
+        flash("Invalid export dataset selected.", "danger")
+        return redirect(url_for('export_hub'))
+
+   # Deliver with UTF-8 BOM so spreadsheet engines recognize accents and currency symbols
+    bytes_data = output.getvalue().encode('utf-8-sig')
+    return Response(
+        bytes_data,
+        mimetype="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+@app.route('/export/excel')
+def export_excel():
+    filter_type, start_date, end_date = parse_date_filter(request)
+    unit_id_filter = request.args.get('unit_id')
+    sales_q, expenses_q, payments_q = get_export_queries(start_date, end_date, unit_id_filter)
+
+    wb = openpyxl.Workbook()
+    # Remove default sheet
+    wb.remove(wb.active)
+
+    header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+    header_fill = PatternFill(start_color="2C523D", end_color="2C523D", fill_type="solid")
+    meta_font = Font(name="Calibri", size=10, italic=True, color="555555")
+    thin_border = Border(
+        left=Side(style='thin', color='E0E0E0'),
+        right=Side(style='thin', color='E0E0E0'),
+        top=Side(style='thin', color='E0E0E0'),
+        bottom=Side(style='thin', color='E0E0E0')
+    )
+
+    def style_sheet(ws, title, meta_text, headers, rows):
+        ws.title = title
+        ws.append([f"Refactored Potato — {title}"])
+        ws.cell(1, 1).font = Font(name="Calibri", size=14, bold=True, color="1E392A")
+        ws.append([meta_text])
+        ws.cell(2, 1).font = meta_font
+        ws.append([]) # Blank spacer
+
+        ws.append(headers)
+        header_row_idx = 4
+        for col_idx in range(1, len(headers) + 1):
+            cell = ws.cell(row=header_row_idx, column=col_idx)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+
+        for r_data in rows:
+            ws.append(r_data)
+            current_row = ws.max_row
+            for c_idx in range(1, len(r_data) + 1):
+                c = ws.cell(row=current_row, column=c_idx)
+                c.border = thin_border
+                # Right align numbers
+                if isinstance(r_data[c_idx - 1], (int, float)):
+                    c.number_format = '#,##0.00'
+                    c.alignment = Alignment(horizontal="right")
+
+        ws.freeze_panes = f"A{header_row_idx + 1}"
+
+        # Adjust column widths dynamically
+        for col in ws.columns:
+            max_len = 0
+            col_letter = get_column_letter(col[0].column)
+            for cell in col:
+                val = str(cell.value or '')
+                if cell.row < 3:
+                    continue # Do not size by metadata headers
+                if len(val) > max_len:
+                    max_len = len(val)
+            ws.column_dimensions[col_letter].width = max(max_len + 3, 12)
+
+    # 1. Sales Sheet
+    sales_headers = ['Sale ID', 'Date', 'Customer', 'Product / Business Unit', 'Quantity', 'Unit Price ($)', 'Total Amount ($)', 'Status', 'Notes']
+    sales_rows = []
+    for s in sales_q.order_by(Sale.date.desc()).all():
+        sales_rows.append([
+            s.id,
+            s.date.strftime('%Y-%m-%d %H:%M'),
+            sanitize_for_spreadsheet(s.customer.name if s.customer else 'Unknown'),
+            sanitize_for_spreadsheet(s.business_unit.name if s.business_unit else 'Unknown'),
+            s.quantity,
+            s.unit_price,
+            s.total_amount,
+            'VOIDED' if s.is_voided else 'Active',
+            sanitize_for_spreadsheet(s.notes or '')
+        ])
+    date_label = f"Period: {filter_type.replace('_', ' ').capitalize()} ({start_date or 'Beginning'} to {end_date or 'Present'})"
+    style_sheet(wb.create_sheet(), "Sales", f"{date_label} | Note: Voided sales remain visible for auditability but are excluded from summaries.", sales_headers, sales_rows)
+
+    # 2. Expenses Sheet
+    exp_headers = ['Expense ID', 'Date', 'Category', 'Description', 'Scope', 'Allocated Business Units', 'Amount ($)', 'Status']
+    exp_rows = []
+    for e in expenses_q.order_by(Expense.date.desc()).all():
+        if e.scope == 'specific':
+            units_str = e.allocated_units[0].name if e.allocated_units else 'Unassigned'
+        elif e.scope == 'shared':
+            units_str = ", ".join([u.name for u in e.allocated_units])
+        elif e.scope == 'farm':
+            units_str = "Entire Farm"
+        else:
+            units_str = "Unallocated"
+        exp_rows.append([
+            e.id,
+            e.date.strftime('%Y-%m-%d %H:%M'),
+            sanitize_for_spreadsheet(e.category),
+            sanitize_for_spreadsheet(e.description or ''),
+            e.scope.capitalize(),
+            sanitize_for_spreadsheet(units_str),
+            e.amount,
+            'VOIDED' if e.is_voided else 'Active'
+        ])
+    style_sheet(wb.create_sheet(), "Expenses", f"{date_label} | Note: Voided expenses are excluded from summaries.", exp_headers, exp_rows)
+
+    # 3. Payments Sheet
+    pmt_headers = ['Payment ID', 'Date', 'Customer', 'Amount ($)', 'Status', 'Notes']
+    pmt_rows = []
+    for p in payments_q.order_by(Payment.date.desc()).all():
+        pmt_rows.append([
+            p.id,
+            p.date.strftime('%Y-%m-%d %H:%M'),
+            sanitize_for_spreadsheet(p.customer.name if p.customer else 'Unknown'),
+            p.amount,
+            'VOIDED' if p.is_voided else 'Active',
+            sanitize_for_spreadsheet(p.notes or '')
+        ])
+    style_sheet(wb.create_sheet(), "Payments", f"{date_label} | Note: Customer payments represent cash received, not additional revenue.", pmt_headers, pmt_rows)
+
+    # 4. Customer Balances Sheet (ALL-TIME)
+    cust_headers = ['Customer ID', 'Customer Name', 'Phone', 'Location', 'Status', 'All-Time Sales ($)', 'All-Time Payments ($)', 'Current Balance ($)']
+    cust_rows = []
+    customers = Customer.query.order_by(Customer.name).all()
+    for c in customers:
+        all_sales = db.session.query(db.func.sum(Sale.total_amount)).filter_by(customer_id=c.id, is_voided=False).scalar() or 0.0
+        all_pmts = db.session.query(db.func.sum(Payment.amount)).filter_by(customer_id=c.id, is_voided=False).scalar() or 0.0
+        balance = all_sales - all_pmts
+        cust_rows.append([
+            c.id,
+            sanitize_for_spreadsheet(c.name),
+            sanitize_for_spreadsheet(c.phone or ''),
+            sanitize_for_spreadsheet(c.location or ''),
+            'Active' if c.is_active else 'Archived',
+            all_sales,
+            all_pmts,
+            balance
+        ])
+    style_sheet(wb.create_sheet(), "Customer Balances", "All-Time Balances | Outstanding balances reflect complete customer ledger history regardless of date filter.", cust_headers, cust_rows)
+
+    # 5. Business Unit Summary Sheet
+    bu_headers = ['Business Unit', 'Sales Count', 'Revenue ($)', 'Direct Expenses ($)', 'Estimated Direct Profit ($)', 'Direct Margin (%)', 'Shared Expenses Memo ($)']
+    bu_rows = []
+    active_units = BusinessUnit.query.filter_by(is_active=True).all()
+    for unit in active_units:
+        u_sales_q = apply_date_filter(Sale.query.filter_by(unit_id=unit.id, is_voided=False), Sale, start_date, end_date)
+        u_direct_exp_q = apply_date_filter(Expense.query.filter(Expense.allocated_units.any(id=unit.id), Expense.scope == 'specific', Expense.is_voided == False), Expense, start_date, end_date)
+        u_shared_exp_q = apply_date_filter(Expense.query.filter(Expense.allocated_units.any(id=unit.id), Expense.scope == 'shared', Expense.is_voided == False), Expense, start_date, end_date)
+
+        rev = u_sales_q.with_entities(db.func.sum(Sale.total_amount)).scalar() or 0.0
+        direct_costs = u_direct_exp_q.with_entities(db.func.sum(Expense.amount)).scalar() or 0.0
+        shared_memo = u_shared_exp_q.with_entities(db.func.sum(Expense.amount)).scalar() or 0.0
+        profit = rev - direct_costs
+        margin_str = f"{(profit / rev * 100):.1f}%" if rev > 0 else 'N/A'
+        count = u_sales_q.count()
+
+        bu_rows.append([
+            sanitize_for_spreadsheet(unit.name),
+            count,
+            rev,
+            direct_costs,
+            profit,
+            margin_str,
+            shared_memo
+        ])
+    style_sheet(wb.create_sheet(), "Business Unit Summary", f"{date_label} | Direct profit excludes shared, farm-wide and unallocated costs to prevent double-counting.", bu_headers, bu_rows)
+
+    excel_buffer = io.BytesIO()
+    wb.save(excel_buffer)
+    excel_buffer.seek(0)
+
+    timestamp = datetime.utcnow().strftime('%Y-%m-%d_%H%M')
+    return send_file(
+        excel_buffer,
+        as_attachment=True,
+        download_name=f"refactored_potato_financials_{timestamp}.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
 
 # ==========================================
 # DASHBOARD
