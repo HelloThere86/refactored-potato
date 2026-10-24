@@ -1,12 +1,151 @@
-from flask import Flask, render_template, request, redirect, url_for, flash
+from flask import Flask, render_template, request, redirect, url_for, flash, send_file, after_this_request
 from models import db, BusinessUnit, Customer, Sale, Payment, Expense
 from datetime import datetime, timedelta
 import os
+import sqlite3
+import tempfile
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///farm.db'
 app.config['SECRET_KEY'] = 'super-secret-key-change-in-production'
 db.init_app(app)
+
+# ==========================================
+# V1.3.1: BACKUP & RESTORE ENGINE
+# ==========================================
+def get_raw_connection():
+    """Extracts the underlying Python DBAPI sqlite3 connection from SQLAlchemy."""
+    raw_conn = db.engine.raw_connection()
+    conn = raw_conn.driver_connection if hasattr(raw_conn, 'driver_connection') else raw_conn.connection
+    return conn, raw_conn
+
+def create_backup_to_file(target_path):
+    """Safely streams the live database to a target file using SQLite's backup API."""
+    source_conn, raw_conn_proxy = get_raw_connection()
+    try:
+        target_conn = sqlite3.connect(target_path)
+        with target_conn:
+            source_conn.backup(target_conn)
+        target_conn.close()
+    finally:
+        raw_conn_proxy.close() # Return connection to pool
+
+def restore_backup_from_file(source_path):
+    """Replaces the live database with a backup file safely."""
+    # Flush active SQLAlchemy connections to release file locks
+    db.session.remove()
+    db.engine.dispose()
+    
+    target_conn, raw_conn_proxy = get_raw_connection()
+    try:
+        source_conn = sqlite3.connect(source_path)
+        with target_conn:
+            source_conn.backup(target_conn)
+        source_conn.close()
+    finally:
+        raw_conn_proxy.close()
+
+def validate_backup(db_path):
+    """Validates that a file is a healthy SQLite database matching our schema."""
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # 1. Internal SQLite corruption check
+        cursor.execute("PRAGMA integrity_check;")
+        result = cursor.fetchone()
+        if not result or result[0].lower() != "ok":
+            return False, "Database integrity check failed. File may be corrupted."
+        
+        # 2. V1.2 Schema verification
+        required_tables = {'business_unit', 'customer', 'sale', 'payment', 'expense', 'expense_allocations'}
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+        tables = {row[0].lower() for row in cursor.fetchall()}
+        missing = required_tables - tables
+        if missing:
+            return False, f"Missing required tables: {', '.join(missing)}. Is this an old or incorrect database?"
+            
+        return True, "Valid"
+    except Exception as e:
+        return False, f"Not a valid SQLite database file. Error: {str(e)}"
+    finally:
+        # Guarantee the connection is closed so Windows can release the file lock
+        if conn:
+            conn.close()
+
+@app.route('/backup/download', methods=['POST'])
+def download_backup():
+    fd, temp_path = tempfile.mkstemp(suffix='.db')
+    os.close(fd)
+    
+    try:
+        create_backup_to_file(temp_path)
+        
+        # Ensure the temp file is deleted after the user downloads it
+        @after_this_request
+        def remove_file(response):
+            try:
+                os.remove(temp_path)
+            except Exception:
+                pass
+            return response
+            
+        timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+        filename = f"refactored_potato_backup_{timestamp}.db"
+        return send_file(temp_path, as_attachment=True, download_name=filename)
+        
+    except Exception as e:
+        flash(f"Failed to create backup: {str(e)}", "danger")
+        return redirect(url_for('settings'))
+
+@app.route('/backup/restore', methods=['POST'])
+def restore_backup():
+    if 'backup_file' not in request.files:
+        flash('No file uploaded.', 'danger')
+        return redirect(url_for('settings'))
+        
+    file = request.files['backup_file']
+    if file.filename == '':
+        flash('No file selected.', 'danger')
+        return redirect(url_for('settings'))
+        
+    fd, temp_path = tempfile.mkstemp(suffix='.db')
+    os.close(fd)
+    file.save(temp_path)
+    
+    # 1. Validate
+    is_valid, msg = validate_backup(temp_path)
+    if not is_valid:
+        os.remove(temp_path)
+        flash(f'Restore aborted. {msg}', 'danger')
+        return redirect(url_for('settings'))
+        
+    # 2. Safety Backup
+    safety_filename = f"farm_safety_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
+    safety_path = os.path.join(app.root_path, safety_filename)
+    try:
+        create_backup_to_file(safety_path)
+    except Exception as e:
+        os.remove(temp_path)
+        flash(f'Failed to create local safety backup. Restore aborted to protect data. Error: {str(e)}', 'danger')
+        return redirect(url_for('settings'))
+        
+    # 3. Perform Restore
+    try:
+        restore_backup_from_file(temp_path)
+        flash('Database restored successfully! All records have been updated.', 'success')
+    except Exception as e:
+        # Attempt Emergency Recovery
+        try:
+            restore_backup_from_file(safety_path)
+            flash(f'Restore failed, but your database was safely recovered from the safety backup. Error: {str(e)}', 'warning')
+        except Exception as recovery_error:
+            flash(f'CRITICAL: Restore AND recovery failed! A safety backup file exists at: {safety_path}', 'danger')
+    finally:
+        os.remove(temp_path)
+        
+    return redirect(url_for('settings'))
 
 # ==========================================
 # UTILITY: DATE FILTERING
@@ -15,7 +154,6 @@ def parse_date_filter(request):
     filter_type = request.args.get('date_filter', 'this_month')
     start_date = None
     end_date = None
-    
     today = datetime.utcnow().date()
     
     if filter_type == 'today':
@@ -40,7 +178,6 @@ def parse_date_filter(request):
             end_date = datetime.strptime(request.args.get('end_date'), '%Y-%m-%d').date()
         except:
             pass
-            
     return filter_type, start_date, end_date
 
 def apply_date_filter(query, model, start_date, end_date):
@@ -80,7 +217,6 @@ def dashboard():
     
     period_profit = period_revenue - period_expenses
     period_margin = (period_profit / period_revenue * 100) if period_revenue > 0 else 'N/A'
-    
     outstanding_debt = get_total_outstanding_credit()
 
     sales_data = sales_q.all()
@@ -124,7 +260,6 @@ def analytics():
     farm_profit = farm_revenue - farm_expenses
     farm_margin = (farm_profit / farm_revenue * 100) if farm_revenue > 0 else 'N/A'
     
-    # Expense Analysis (V1.2 Scopes)
     farm_direct = expenses_q.filter(Expense.scope == 'specific').with_entities(db.func.sum(Expense.amount)).scalar() or 0
     farm_shared = expenses_q.filter(Expense.scope == 'shared').with_entities(db.func.sum(Expense.amount)).scalar() or 0
     farm_wide = expenses_q.filter(Expense.scope == 'farm').with_entities(db.func.sum(Expense.amount)).scalar() or 0
@@ -136,30 +271,23 @@ def analytics():
         categories_dict[e.category] = categories_dict.get(e.category, 0) + e.amount
     expenses_by_category = sorted(categories_dict.items(), key=lambda x: x[1], reverse=True)
 
-    # Business Unit Performance
     units = BusinessUnit.query.filter_by(is_active=True).all()
     performance = []
     
     for unit in units:
         unit_sales_q = sales_q.filter_by(unit_id=unit.id)
-        
         direct_costs = expenses_q.filter(Expense.allocated_units.any(id=unit.id), Expense.scope == 'specific').with_entities(db.func.sum(Expense.amount)).scalar() or 0
         shared_costs_memo = expenses_q.filter(Expense.allocated_units.any(id=unit.id), Expense.scope == 'shared').with_entities(db.func.sum(Expense.amount)).scalar() or 0
         
         rev = unit_sales_q.with_entities(db.func.sum(Sale.total_amount)).scalar() or 0
         count = unit_sales_q.count()
-        
         profit = rev - direct_costs
         margin = (profit / rev * 100) if rev > 0 else 'N/A'
         
         performance.append({
-            'name': unit.name,
-            'revenue': rev,
-            'direct_costs': direct_costs,
-            'shared_costs_memo': shared_costs_memo,
-            'profit': profit,
-            'margin': margin,
-            'count': count
+            'name': unit.name, 'revenue': rev, 'direct_costs': direct_costs,
+            'shared_costs_memo': shared_costs_memo, 'profit': profit,
+            'margin': margin, 'count': count
         })
         
     customers = Customer.query.filter_by(is_active=True).all()
@@ -178,13 +306,10 @@ def analytics():
         
     return render_template('analytics.html', 
                            filter_type=filter_type, start_date=start_date, end_date=end_date,
-                           performance=performance,
-                           farm_revenue=farm_revenue, farm_expenses=farm_expenses,
-                           farm_profit=farm_profit, farm_margin=farm_margin,
-                           farm_direct=farm_direct, farm_shared=farm_shared, 
-                           farm_wide=farm_wide, farm_unallocated=farm_unallocated,
-                           expenses_by_category=expenses_by_category,
-                           customer_analytics=customer_analytics)
+                           performance=performance, farm_revenue=farm_revenue, farm_expenses=farm_expenses,
+                           farm_profit=farm_profit, farm_margin=farm_margin, farm_direct=farm_direct, 
+                           farm_shared=farm_shared, farm_wide=farm_wide, farm_unallocated=farm_unallocated,
+                           expenses_by_category=expenses_by_category, customer_analytics=customer_analytics)
 
 # ==========================================
 # LEDGER
@@ -232,15 +357,10 @@ def ledger():
             
     if not type_filter or type_filter == 'Expense':
         for e in expenses_q.all():
-            # FIXED: V1.2 Correct Ledger Labeling
-            if e.scope == 'specific':
-                biz_label = e.allocated_units[0].name if e.allocated_units else 'Unknown'
-            elif e.scope == 'shared':
-                biz_label = f"Shared ({len(e.allocated_units)} units)"
-            elif e.scope == 'farm':
-                biz_label = "Entire Farm"
-            else:
-                biz_label = "Unallocated"
+            if e.scope == 'specific': biz_label = e.allocated_units[0].name if e.allocated_units else 'Unknown'
+            elif e.scope == 'shared': biz_label = f"Shared ({len(e.allocated_units)} units)"
+            elif e.scope == 'farm': biz_label = "Entire Farm"
+            else: biz_label = "Unallocated"
                 
             transactions.append({
                 'id': e.id, 'type': 'Expense', 'date': e.date, 

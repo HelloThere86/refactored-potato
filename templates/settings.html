@@ -107,4 +107,41 @@
   </section>
 
 </div>
+
+<!-- Backup and restore -->
+<section class="mt-5" aria-labelledby="backup-heading">
+  <h2 class="section-title" id="backup-heading">Backup and restore</h2>
+
+  <div class="row g-4">
+    <div class="col-md-6">
+      <div class="backup-panel">
+        <h3 class="section-title">Create a backup</h3>
+        <p class="form-text">
+          Download a complete copy of your farm's records. Do this regularly, and keep the file somewhere safe.
+        </p>
+        <form action="/backup/download" method="POST">
+          <button type="submit" class="btn btn-primary btn-lg w-100">Download backup file</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="col-md-6">
+      <div class="backup-panel">
+        <h3 class="section-title">Restore from a backup</h3>
+        <p class="form-text mb-2">Upload a previously saved backup file to restore your farm's records.</p>
+        <p class="notice notice-warning">
+          <strong>Warning:</strong> this replaces your current records. Anything entered after the backup was made will be lost.
+        </p>
+        <form action="/backup/restore" method="POST" enctype="multipart/form-data"
+              onsubmit="return confirm('Are you sure you want to replace your current records with this backup file? This cannot be easily undone.');">
+          <label class="form-label" for="backup_file">Backup file</label>
+          <div class="input-group">
+            <input type="file" id="backup_file" name="backup_file" class="form-control" accept=".db" required>
+            <button type="submit" class="btn btn-danger">Restore</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</section>
 {% endblock %}
