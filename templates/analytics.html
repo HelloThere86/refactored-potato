@@ -56,6 +56,7 @@
       <th scope="col">Sales</th>
       <th scope="col">Revenue</th>
       <th scope="col">Direct expenses</th>
+      <th scope="col">Shared (Memo)</th>
       <th scope="col">Estimated profit</th>
       <th scope="col">Margin</th>
     </tr>
@@ -66,7 +67,8 @@
       <th scope="row">{{ p.name }}</th>
       <td data-label="Sales">{{ p.count }}</td>
       <td data-label="Revenue">{{ money(p.revenue) }}</td>
-      <td data-label="Direct expenses">{{ money(p.costs) }}</td>
+      <td data-label="Direct expenses">{{ money(p.direct_costs) }}</td>
+      <td data-label="Shared (Memo)" style="color: #6c757d;">{{ money(p.shared_costs_memo) }}</td>
       <td data-label="Estimated profit" class="profit{% if p.profit < 0 %} is-loss{% endif %}">{{ money(p.profit) }}</td>
       <td data-label="Margin"{% if p.margin != 'N/A' and p.margin < 0 %} class="is-loss"{% endif %}>
         {% if p.margin == 'N/A' %}—{% else %}{{ "{:.1f}".format(p.margin) }}%{% endif %}
@@ -76,7 +78,7 @@
   </tbody>
 </table>
 <p class="table-note">
-  Product profits leave out shared farm expenses. Those are only taken off in the whole-farm total above.
+  Product profits leave out shared and farm-wide expenses. Those are only taken off in the whole-farm total above.
 </p>
 {% else %}
 <p class="empty-note">No products yet. <a href="/settings">Add one in Settings</a>, then record sales and expenses against it.</p>
@@ -89,18 +91,32 @@
       <span class="section-total">{{ money(farm_expenses) }} total</span>
     </div>
 
-    {% if expenses_by_category or farm_shared %}
+    {% if expenses_by_category or farm_expenses > 0 %}
     <table class="ledger ledger-quiet">
       <caption class="visually-hidden">Expenses broken down by category, for the selected period</caption>
       <tbody>
         <tr>
-          <th scope="row">Shared farm expenses</th>
+          <th scope="row">Direct (Specific business)</th>
+          <td>{{ money(farm_direct) }}</td>
+        </tr>
+        <tr>
+          <th scope="row">Shared (Selected businesses)</th>
           <td>{{ money(farm_shared) }}</td>
         </tr>
+        <tr>
+          <th scope="row">Entire farm</th>
+          <td>{{ money(farm_wide) }}</td>
+        </tr>
+        <tr>
+          <th scope="row" style="border-bottom: 2px solid var(--border-color, #E5E2D9); padding-bottom: 12px;">Unallocated</th>
+          <td style="border-bottom: 2px solid var(--border-color, #E5E2D9); padding-bottom: 12px;">{{ money(farm_unallocated) }}</td>
+        </tr>
+        
+        <!-- Individual Categories listed below -->
         {% for cat, amt in expenses_by_category %}
         <tr>
-          <th scope="row">{{ cat }}</th>
-          <td>{{ money(amt) }}</td>
+          <th scope="row" style="padding-top: 12px;">{{ cat }}</th>
+          <td style="padding-top: 12px;">{{ money(amt) }}</td>
         </tr>
         {% endfor %}
       </tbody>

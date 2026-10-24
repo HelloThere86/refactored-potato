@@ -12,7 +12,6 @@ db.init_app(app)
 # UTILITY: DATE FILTERING
 # ==========================================
 def parse_date_filter(request):
-    """Parses date filters from the URL parameters."""
     filter_type = request.args.get('date_filter', 'this_month')
     start_date = None
     end_date = None
@@ -40,12 +39,11 @@ def parse_date_filter(request):
             start_date = datetime.strptime(request.args.get('start_date'), '%Y-%m-%d').date()
             end_date = datetime.strptime(request.args.get('end_date'), '%Y-%m-%d').date()
         except:
-            pass # Fallback to all time if custom dates are missing/invalid
+            pass
             
     return filter_type, start_date, end_date
 
 def apply_date_filter(query, model, start_date, end_date):
-    """Applies start and end dates to a SQLAlchemy query."""
     if start_date:
         query = query.filter(model.date >= datetime.combine(start_date, datetime.min.time()))
     if end_date:
@@ -56,13 +54,11 @@ def apply_date_filter(query, model, start_date, end_date):
 # HELPER: ALL-TIME BALANCES
 # ==========================================
 def get_customer_balance(customer_id):
-    """All-time outstanding balance calculation."""
     sales = db.session.query(db.func.sum(Sale.total_amount)).filter_by(customer_id=customer_id, is_voided=False).scalar() or 0
     payments = db.session.query(db.func.sum(Payment.amount)).filter_by(customer_id=customer_id, is_voided=False).scalar() or 0
     return sales - payments
 
 def get_total_outstanding_credit():
-    """Calculates farm-wide all-time outstanding debt."""
     total_sales = db.session.query(db.func.sum(Sale.total_amount)).filter_by(is_voided=False).scalar() or 0
     total_payments = db.session.query(db.func.sum(Payment.amount)).filter_by(is_voided=False).scalar() or 0
     return total_sales - total_payments
@@ -74,12 +70,10 @@ def get_total_outstanding_credit():
 def dashboard():
     filter_type, start_date, end_date = parse_date_filter(request)
     
-    # 1. Base Queries
     sales_q = apply_date_filter(Sale.query.filter_by(is_voided=False), Sale, start_date, end_date)
     payments_q = apply_date_filter(Payment.query.filter_by(is_voided=False), Payment, start_date, end_date)
     expenses_q = apply_date_filter(Expense.query.filter_by(is_voided=False), Expense, start_date, end_date)
     
-    # 2. Period Summary Math
     period_revenue = sales_q.with_entities(db.func.sum(Sale.total_amount)).scalar() or 0
     period_cash = payments_q.with_entities(db.func.sum(Payment.amount)).scalar() or 0
     period_expenses = expenses_q.with_entities(db.func.sum(Expense.amount)).scalar() or 0
@@ -87,10 +81,8 @@ def dashboard():
     period_profit = period_revenue - period_expenses
     period_margin = (period_profit / period_revenue * 100) if period_revenue > 0 else 'N/A'
     
-    # All-time Debt
     outstanding_debt = get_total_outstanding_credit()
 
-    # 3. Chart Data Generation
     sales_data = sales_q.all()
     expenses_data = expenses_q.all()
     
@@ -120,11 +112,10 @@ def dashboard():
 # ANALYTICS & REPORTING
 # ==========================================
 @app.route('/analytics')
-@app.route('/profitability') # Catch legacy link
+@app.route('/profitability')
 def analytics():
     filter_type, start_date, end_date = parse_date_filter(request)
     
-    # --- A. ENTIRE FARM SUMMARY ---
     sales_q = apply_date_filter(Sale.query.filter_by(is_voided=False), Sale, start_date, end_date)
     expenses_q = apply_date_filter(Expense.query.filter_by(is_voided=False), Expense, start_date, end_date)
     
@@ -133,58 +124,56 @@ def analytics():
     farm_profit = farm_revenue - farm_expenses
     farm_margin = (farm_profit / farm_revenue * 100) if farm_revenue > 0 else 'N/A'
     
-    # --- B. EXPENSE ANALYSIS ---
-    farm_shared_expenses = expenses_q.filter(Expense.unit_id == None).with_entities(db.func.sum(Expense.amount)).scalar() or 0
+    # Expense Analysis (V1.2 Scopes)
+    farm_direct = expenses_q.filter(Expense.scope == 'specific').with_entities(db.func.sum(Expense.amount)).scalar() or 0
+    farm_shared = expenses_q.filter(Expense.scope == 'shared').with_entities(db.func.sum(Expense.amount)).scalar() or 0
+    farm_wide = expenses_q.filter(Expense.scope == 'farm').with_entities(db.func.sum(Expense.amount)).scalar() or 0
+    farm_unallocated = expenses_q.filter(Expense.scope == 'unallocated').with_entities(db.func.sum(Expense.amount)).scalar() or 0
     
-    # Group expenses by category safely
     expenses_data = expenses_q.all()
     categories_dict = {}
     for e in expenses_data:
         categories_dict[e.category] = categories_dict.get(e.category, 0) + e.amount
     expenses_by_category = sorted(categories_dict.items(), key=lambda x: x[1], reverse=True)
 
-    # --- C. BUSINESS UNIT PERFORMANCE ---
+    # Business Unit Performance
     units = BusinessUnit.query.filter_by(is_active=True).all()
     performance = []
     
     for unit in units:
         unit_sales_q = sales_q.filter_by(unit_id=unit.id)
-        unit_exp_q = expenses_q.filter_by(unit_id=unit.id)
+        
+        direct_costs = expenses_q.filter(Expense.allocated_units.any(id=unit.id), Expense.scope == 'specific').with_entities(db.func.sum(Expense.amount)).scalar() or 0
+        shared_costs_memo = expenses_q.filter(Expense.allocated_units.any(id=unit.id), Expense.scope == 'shared').with_entities(db.func.sum(Expense.amount)).scalar() or 0
         
         rev = unit_sales_q.with_entities(db.func.sum(Sale.total_amount)).scalar() or 0
-        costs = unit_exp_q.with_entities(db.func.sum(Expense.amount)).scalar() or 0
         count = unit_sales_q.count()
         
-        profit = rev - costs
+        profit = rev - direct_costs
         margin = (profit / rev * 100) if rev > 0 else 'N/A'
         
         performance.append({
             'name': unit.name,
             'revenue': rev,
-            'costs': costs,
+            'direct_costs': direct_costs,
+            'shared_costs_memo': shared_costs_memo,
             'profit': profit,
             'margin': margin,
             'count': count
         })
         
-    # --- D. CREDIT & CUSTOMER ANALYTICS ---
-    # Customer balances are fundamentally ALL-TIME, but we show period activity.
     customers = Customer.query.filter_by(is_active=True).all()
     customer_analytics = []
     for c in customers:
         balance = get_customer_balance(c.id)
-        if balance > 0: # Only list customers who owe money
-            # Fetch their most recent non-voided sale
+        if balance > 0:
             recent_sale = Sale.query.filter_by(customer_id=c.id, is_voided=False).order_by(Sale.date.desc()).first()
             recent_payment = Payment.query.filter_by(customer_id=c.id, is_voided=False).order_by(Payment.date.desc()).first()
-            
             customer_analytics.append({
-                'name': c.name,
-                'balance': balance,
+                'name': c.name, 'balance': balance,
                 'recent_sale': recent_sale.date if recent_sale else None,
                 'recent_payment': recent_payment.date if recent_payment else None
             })
-            
     customer_analytics.sort(key=lambda x: x['balance'], reverse=True)
         
     return render_template('analytics.html', 
@@ -192,12 +181,13 @@ def analytics():
                            performance=performance,
                            farm_revenue=farm_revenue, farm_expenses=farm_expenses,
                            farm_profit=farm_profit, farm_margin=farm_margin,
-                           farm_shared=farm_shared_expenses,
+                           farm_direct=farm_direct, farm_shared=farm_shared, 
+                           farm_wide=farm_wide, farm_unallocated=farm_unallocated,
                            expenses_by_category=expenses_by_category,
                            customer_analytics=customer_analytics)
 
 # ==========================================
-# LEDGER (With V1.1 Filtering)
+# LEDGER
 # ==========================================
 @app.route('/ledger')
 def ledger():
@@ -206,21 +196,19 @@ def ledger():
     customer_id_filter = request.args.get('customer_id')
     type_filter = request.args.get('type')
 
-    # Base Queries
     sales_q = apply_date_filter(Sale.query, Sale, start_date, end_date)
     payments_q = apply_date_filter(Payment.query, Payment, start_date, end_date)
     expenses_q = apply_date_filter(Expense.query, Expense, start_date, end_date)
     
-    # Apply Specific Filters
     if unit_id_filter:
         sales_q = sales_q.filter_by(unit_id=unit_id_filter)
-        expenses_q = expenses_q.filter_by(unit_id=unit_id_filter)
-        payments_q = payments_q.filter(False) # Payments don't have unit_ids in V1
+        expenses_q = expenses_q.filter(Expense.allocated_units.any(id=unit_id_filter))
+        payments_q = payments_q.filter(False)
         
     if customer_id_filter:
         sales_q = sales_q.filter_by(customer_id=customer_id_filter)
         payments_q = payments_q.filter_by(customer_id=customer_id_filter)
-        expenses_q = expenses_q.filter(False) # Expenses don't have customers
+        expenses_q = expenses_q.filter(False)
 
     transactions = []
     
@@ -244,14 +232,22 @@ def ledger():
             
     if not type_filter or type_filter == 'Expense':
         for e in expenses_q.all():
+            # FIXED: V1.2 Correct Ledger Labeling
+            if e.scope == 'specific':
+                biz_label = e.allocated_units[0].name if e.allocated_units else 'Unknown'
+            elif e.scope == 'shared':
+                biz_label = f"Shared ({len(e.allocated_units)} units)"
+            elif e.scope == 'farm':
+                biz_label = "Entire Farm"
+            else:
+                biz_label = "Unallocated"
+                
             transactions.append({
                 'id': e.id, 'type': 'Expense', 'date': e.date, 
-                'desc': e.description, 
-                'business': e.business_unit.name if e.business_unit else 'Shared / Farm-Wide', 
+                'desc': e.description, 'business': biz_label, 
                 'amount': e.amount, 'is_voided': e.is_voided
             })
             
-    # Sort newest first
     transactions.sort(key=lambda x: x['date'], reverse=True)
     
     units = BusinessUnit.query.filter_by(is_active=True).all()
@@ -263,7 +259,7 @@ def ledger():
                            unit_id_filter=unit_id_filter, customer_id_filter=customer_id_filter, type_filter=type_filter)
 
 # ==========================================
-# EXISTING DATA ENTRY ROUTES (Preserved exactly as V1.0)
+# DATA ENTRY ROUTES
 # ==========================================
 @app.route('/sales/new', methods=['GET', 'POST'])
 def record_sale():
@@ -311,17 +307,28 @@ def record_payment():
 @app.route('/expenses/new', methods=['GET', 'POST'])
 def record_expense():
     if request.method == 'POST':
-        unit_id = request.form.get('unit_id')
+        scope = request.form.get('scope', 'unallocated')
         expense = Expense(
             amount=float(request.form['amount']),
             category=request.form['category'],
             description=request.form['description'],
-            unit_id=unit_id if unit_id != 'shared' else None
+            scope=scope
         )
+        
+        if scope == 'specific':
+            unit = BusinessUnit.query.get(request.form.get('single_unit_id'))
+            if unit: expense.allocated_units.append(unit)
+        elif scope == 'shared':
+            shared_ids = request.form.getlist('shared_unit_ids')
+            for uid in shared_ids:
+                unit = BusinessUnit.query.get(uid)
+                if unit: expense.allocated_units.append(unit)
+                
         db.session.add(expense)
         db.session.commit()
         flash('Expense recorded successfully.', 'success')
         return redirect(url_for('dashboard'))
+        
     units = BusinessUnit.query.filter_by(is_active=True).all()
     categories = ["Fertilizer", "Seeds", "Feed", "Fuel", "Labour", "Transport", "Packaging", "Electricity", "Water", "Repairs", "Maintenance", "Small Purchases", "Other"]
     return render_template('record_expense.html', units=units, categories=categories)
@@ -354,7 +361,7 @@ def edit_customer(id):
         customer.location = request.form.get('location')
         customer.notes = request.form.get('notes')
         db.session.commit()
-        flash(f'Customer updated.', 'success')
+        flash('Customer updated.', 'success')
         return redirect(url_for('settings'))
     return render_template('edit_customer.html', customer=customer)
 
@@ -363,7 +370,7 @@ def toggle_active(type, id):
     obj = Customer.query.get_or_404(id) if type == 'customer' else BusinessUnit.query.get_or_404(id)
     obj.is_active = not obj.is_active
     db.session.commit()
-    flash(f'Status updated.', 'info')
+    flash('Status updated.', 'info')
     return redirect(url_for('settings'))
 
 @app.route('/ledger/void/<type>/<int:id>')
@@ -373,7 +380,7 @@ def void_transaction(type, id):
     elif type == 'Expense': obj = Expense.query.get_or_404(id)
     obj.is_voided = True
     db.session.commit()
-    flash(f'Transaction voided.', 'warning')
+    flash('Transaction voided.', 'warning')
     return redirect(url_for('ledger'))
 
 if __name__ == '__main__':

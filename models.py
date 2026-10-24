@@ -3,6 +3,12 @@ from datetime import datetime
 
 db = SQLAlchemy()
 
+# V1.2: Many-to-Many Association Table for Shared Expenses
+expense_allocations = db.Table('expense_allocations',
+    db.Column('expense_id', db.Integer, db.ForeignKey('expense.id'), primary_key=True),
+    db.Column('business_unit_id', db.Integer, db.ForeignKey('business_unit.id'), primary_key=True)
+)
+
 class BusinessUnit(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
@@ -46,7 +52,13 @@ class Expense(db.Model):
     amount = db.Column(db.Float, nullable=False)
     category = db.Column(db.String(50), nullable=False)
     description = db.Column(db.String(255))
-    unit_id = db.Column(db.Integer, db.ForeignKey('business_unit.id'), nullable=True)
-    is_voided = db.Column(db.Boolean, default=False)
     
-    business_unit = db.relationship('BusinessUnit')
+    # V1.1 Legacy Column (Kept for DB schema compatibility)
+    unit_id = db.Column(db.Integer, db.ForeignKey('business_unit.id'), nullable=True)
+    
+    # V1.2 New Columns
+    scope = db.Column(db.String(20), default='unallocated') # 'specific', 'shared', 'farm', 'unallocated'
+    allocated_units = db.relationship('BusinessUnit', secondary=expense_allocations, backref='shared_expenses')
+    
+    is_voided = db.Column(db.Boolean, default=False)
+    business_unit = db.relationship('BusinessUnit') # Legacy backref
