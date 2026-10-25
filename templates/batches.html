@@ -1,0 +1,60 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1 class="panel-title mb-1">Production batches</h1>
+    <p class="form-lede mb-0">Crop batch tracking for Fancy Lettuce, Iceberg Lettuce, and Celery.</p>
+  </div>
+  <a href="/batches/new" class="btn btn-primary btn-lg">Add a batch</a>
+</div>
+
+<nav class="filter-tabs" aria-label="Filter by status">
+  <a href="/batches?status=active" {% if status_filter == 'active' %}class="is-active"{% endif %}>Active batches</a>
+  <a href="/batches?status=completed" {% if status_filter == 'completed' %}class="is-active"{% endif %}>Completed</a>
+  <a href="/batches?status=all" {% if status_filter == 'all' %}class="is-active"{% endif %}>All batches</a>
+</nav>
+
+{% if batches %}
+<div class="table-scroll">
+  <table class="data-table">
+    <caption class="visually-hidden">Production batches, their planted and remaining quantities, and review status</caption>
+    <thead>
+      <tr>
+        <th scope="col">Batch code</th>
+        <th scope="col">Product</th>
+        <th scope="col">Planting date</th>
+        <th scope="col" class="num">Planted</th>
+        <th scope="col" class="num">Field availability (est.)</th>
+        <th scope="col">Status</th>
+        <th scope="col">Last reviewed</th>
+        <th scope="col"><span class="visually-hidden">Actions</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for b in batches %}
+      <tr>
+        <th scope="row"><a href="/batches/{{ b.id }}">{{ b.batch_code }}</a></th>
+        <td>{{ b.business_unit.name }}</td>
+        <td>{{ b.planting_date.strftime('%d %b %Y') }}</td>
+        <td class="num">{{ "{:,}".format(b.quantity_planted) }} {{ b.planted_unit }}</td>
+        <td class="num">{{ "{:,}".format(b.estimated_remaining_quantity) }}</td>
+        <td>
+          <span class="status-tag{% if b.status in ['growing', 'harvesting'] %} is-active{% else %} is-muted{% endif %}">
+            {{ b.status.title() }}
+          </span>
+        </td>
+        <td>
+          {{ b.last_estimate_review_date.strftime('%d %b %Y') }}
+          {% if b.needs_review %}<span class="status-tag is-warning">&middot; review due</span>{% endif %}
+        </td>
+        <td><a href="/batches/{{ b.id }}">Manage</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="empty-note">No production batches for this filter.</p>
+{% endif %}
+{% endblock %}

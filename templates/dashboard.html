@@ -5,6 +5,32 @@
 {%- endmacro %}
 
 {% block content %}
+{% if review_reminders %}
+<div class="notice notice-warning mb-4">
+  <h3>Field estimates need a review</h3>
+  <p class="mb-0">
+    These active batches haven't had their field estimate reviewed in 14 days or more.
+    A walk through the field keeps availability matching what's actually growing.
+  </p>
+  <ul>
+    {% for item in review_reminders %}
+    <li>
+      <strong>{{ item.batch.batch_code }}</strong> ({{ item.batch.business_unit.name }}) &mdash;
+      last reviewed {{ item.days }} days ago, currently estimated at {{ item.batch.estimated_remaining_quantity }}.
+      <a href="/batches/{{ item.batch.id }}">Update estimate</a>
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+{% if surplus_on_hand > 0 %}
+<div class="notice notice-row mb-4">
+  <span><strong>{{ surplus_on_hand }}</strong> extra heads or stalks cut as surplus during previous orders.</span>
+  <a href="/inventory" class="btn btn-outline-secondary btn-sm">View surplus inventory</a>
+</div>
+{% endif %}
+
 <div class="page-head">
   <h1 class="panel-title">Dashboard</h1>
   <form class="period-form" method="GET">

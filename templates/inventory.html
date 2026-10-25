@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1 class="panel-title mb-1">Surplus inventory</h1>
+    <p class="form-lede mb-0">Produce cut as occasional extras during customer orders.</p>
+  </div>
+  <a href="/batches" class="btn btn-outline-secondary">Production batches</a>
+</div>
+
+<h2 class="section-title">Active surplus on hand</h2>
+{% if surplus_lots %}
+<div class="table-scroll mb-5">
+  <table class="data-table">
+    <caption class="visually-hidden">Surplus produce currently in stock, by batch</caption>
+    <thead>
+      <tr>
+        <th scope="col">Harvest date</th>
+        <th scope="col">Batch</th>
+        <th scope="col">Product</th>
+        <th scope="col" class="num">Cut extra</th>
+        <th scope="col" class="num">Remaining surplus</th>
+        <th scope="col">Log waste or spoilage</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for lot in surplus_lots %}
+      <tr>
+        <td>{{ lot.harvest_date.strftime('%d %b %Y %H:%M') }}</td>
+        <td><a href="/batches/{{ lot.batch_id }}">{{ lot.batch.batch_code }}</a></td>
+        <td>{{ lot.batch.business_unit.name }}</td>
+        <td class="num">{{ lot.quantity_surplus }}</td>
+        <td class="num">{{ lot.quantity_remaining }}</td>
+        <td>
+          <form method="POST" action="/inventory/waste" class="inline-form"
+                onsubmit="return confirm('Log waste for this surplus produce?');">
+            <input type="hidden" name="lot_id" value="{{ lot.id }}">
+            <input type="number" name="quantity" class="form-control" style="width: 5.5rem;" min="1" max="{{ lot.quantity_remaining }}" value="{{ lot.quantity_remaining }}" required>
+            <select name="movement_type" class="form-select" style="width: 7rem;">
+              <option value="waste">Waste</option>
+              <option value="spoilage">Spoiled</option>
+              <option value="correction">Adjust</option>
+            </select>
+            <button type="submit" class="btn btn-sm btn-outline-danger">Log</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="empty-note mb-5">No surplus produce in stock. All harvested produce was sold directly to customers.</p>
+{% endif %}
+
+<h2 class="section-title">Audit trail</h2>
+{% if movements %}
+<div class="table-scroll">
+  <table class="data-table">
+    <caption class="visually-hidden">Recent surplus inventory movements</caption>
+    <thead>
+      <tr>
+        <th scope="col">Date and time</th>
+        <th scope="col">Batch</th>
+        <th scope="col">Type</th>
+        <th scope="col" class="num">Quantity</th>
+        <th scope="col">Reason</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for m in movements %}
+      <tr>
+        <td>{{ m.timestamp.strftime('%d %b %Y %H:%M') }}</td>
+        <td>{{ m.harvest_lot.batch.batch_code }}</td>
+        <td><span class="status-tag is-muted">{{ m.movement_type }}</span></td>
+        <td class="num {% if m.quantity > 0 %}delta-positive{% else %}delta-negative{% endif %}">
+          {% if m.quantity > 0 %}+{% endif %}{{ m.quantity }}
+        </td>
+        <td>{{ m.reason }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="empty-note">No surplus movements recorded yet.</p>
+{% endif %}
+{% endblock %}

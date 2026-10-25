@@ -1,0 +1,67 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h1 class="panel-title">Add a production batch</h1>
+
+<div class="form-sheet">
+  <form method="POST">
+    <div class="row g-3 mb-3">
+      <div class="col-md-6">
+        <label class="form-label" for="batch_code">Batch code</label>
+        <input type="text" id="batch_code" name="batch_code" class="form-control" placeholder="For example, FL-2026-B01" required>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label" for="unit_id">Product</label>
+        <select id="unit_id" name="unit_id" class="form-select" required>
+          {% for u in units %}
+          <option value="{{ u.id }}">{{ u.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div class="row g-3 mb-3">
+      <div class="col-md-6">
+        <label class="form-label" for="planting_date">Planting date</label>
+        <input type="date" id="planting_date" name="planting_date" class="form-control" required value="{{ today }}">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label" for="quantity_planted">Quantity planted</label>
+        <div class="input-group">
+          <input type="number" id="quantity_planted" name="quantity_planted" class="form-control" min="1" required placeholder="For example, 1000">
+          <input type="text" name="planted_unit" class="form-control" value="seedlings" style="max-width: 9rem;">
+        </div>
+      </div>
+    </div>
+
+    <div class="form-section">
+      <label class="form-label" for="estimated_remaining_quantity">Initial estimated saleable produce (heads or stalks)</label>
+      <input type="number" id="estimated_remaining_quantity" name="estimated_remaining_quantity" class="form-control form-control-lg" min="0" required placeholder="For example, 850" aria-describedby="estimate-help">
+      <p id="estimate-help" class="form-text mt-2 mb-0">
+        Planted quantity and saleable harvest are different, since plantings face mortality and losses. This estimate governs field availability for harvest-to-order sales, and you can review it at any time.
+      </p>
+    </div>
+
+    <div class="row g-3 my-1">
+      <div class="col-md-6">
+        <label class="form-label" for="expected_harvest_date">Expected harvest date <span class="optional">(optional)</span></label>
+        <input type="date" id="expected_harvest_date" name="expected_harvest_date" class="form-control">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label" for="expected_yield">Expected total yield <span class="optional">(optional, for planning)</span></label>
+        <input type="number" id="expected_yield" name="expected_yield" class="form-control">
+      </div>
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label" for="notes">Notes <span class="optional">(optional)</span></label>
+      <textarea id="notes" name="notes" class="form-control" rows="2" placeholder="Bed location, seed supplier, or field notes"></textarea>
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary btn-lg">Create batch</button>
+      <a href="/batches" class="btn btn-outline-secondary btn-lg">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

@@ -71,8 +71,8 @@ def test_sales_csv_export(client, export_test_data):
     reader = list(csv.reader(io.StringIO(content)))
     headers = reader[0]
 
-    assert headers == ['Sale ID', 'Date', 'Customer', 'Product / Business Unit', 'Quantity', 'Unit Price ($)', 'Total Amount ($)', 'Status', 'Notes']
-    statuses = [row[7] for row in reader[1:]]
+    assert headers == ['Sale ID', 'Date', 'Customer', 'Product / Business Unit', 'Quantity', 'Unit Price ($)', 'Total Amount ($)', 'Batch', 'Status', 'Notes']
+    statuses = [row[8] for row in reader[1:]]
     assert "Active" in statuses
     assert "VOIDED" in statuses
 

@@ -17,6 +17,8 @@
             <a class="brand" href="/">Refactored Potato</a>
             <nav class="site-nav" aria-label="Main">
                 <a href="/" {% if request.path == '/' %}aria-current="page"{% endif %}>Dashboard</a>
+                <a href="/batches" {% if request.path.startswith('/batches') %}aria-current="page"{% endif %}>Batches</a>
+                <a href="/inventory" {% if request.path.startswith('/inventory') %}aria-current="page"{% endif %}>Inventory</a>
                 <a href="/analytics" {% if request.path.startswith('/analytics') %}aria-current="page"{% endif %}>Analytics</a>
                 <a href="/ledger" {% if request.path.startswith('/ledger') %}aria-current="page"{% endif %}>Ledger</a>
                 <a href="/export" {% if request.path.startswith('/export') %}aria-current="page"{% endif %}>Exports</a>

@@ -1213,3 +1213,240 @@ body {
   margin-top: 1.25rem;
   margin-bottom: 0;
 }
+
+/* ---------- Wide data tables (batches, harvests, inventory) ---------- */
+
+.table-scroll {
+  overflow-x: auto;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+}
+
+.data-table {
+  width: 100%;
+  min-width: 46rem;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.data-table th,
+.data-table td {
+  padding: 0.8rem 1.1rem;
+  border-bottom: 1px solid var(--rule);
+  text-align: left;
+  white-space: nowrap;
+  vertical-align: baseline;
+}
+
+.data-table thead th {
+  color: var(--muted);
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.data-table tbody tr:last-child > * {
+  border-bottom: 0;
+}
+
+.data-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.data-table tr.is-voided td {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+.data-table a {
+  color: var(--field);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.data-table a:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+/* Status / small inline values, in place of colored badges */
+
+.status-tag {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.status-tag.is-active   { color: var(--field); }
+.status-tag.is-muted    { color: var(--muted); font-weight: 400; }
+.status-tag.is-warning  { color: var(--owed); }
+.status-tag.is-negative { color: var(--loss); }
+
+.delta-positive { color: var(--field); font-weight: 700; }
+.delta-negative { color: var(--loss); font-weight: 700; }
+
+/* ---------- Filter tabs (status filters etc.) ---------- */
+
+.filter-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.5rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+.filter-tabs a {
+  padding: 0.5rem 0 0.75rem;
+  border-bottom: 3px solid transparent;
+  color: var(--muted);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.filter-tabs a:hover {
+  color: var(--ink);
+}
+
+.filter-tabs a.is-active {
+  color: var(--ink);
+  border-bottom-color: var(--field);
+}
+
+/* ---------- Info / figure panels (batch detail) ---------- */
+
+.info-panel {
+  height: 100%;
+  padding: 1.5rem;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+}
+
+.info-panel h3 {
+  margin: 0 0 1rem;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.info-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.info-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.4rem 0;
+}
+
+.info-list li + li {
+  border-top: 1px solid var(--rule);
+}
+
+.info-list .label {
+  color: var(--muted);
+}
+
+.info-list .value {
+  font-weight: 700;
+  text-align: right;
+}
+
+.figure-panel {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  text-align: center;
+}
+
+.figure-value {
+  margin: 0.4rem 0;
+  font-size: 2.25rem;
+  font-weight: 700;
+  color: var(--field);
+  font-variant-numeric: tabular-nums;
+}
+
+.figure-label {
+  color: var(--muted);
+  font-size: 0.9375rem;
+}
+
+/* ---------- Notices with a row layout or a list inside ---------- */
+
+.notice-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1.5rem;
+}
+
+.notice h3 {
+  margin: 0 0 0.35rem;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.notice ul {
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.notice li {
+  padding: 0.5rem 0;
+}
+
+.notice li + li {
+  border-top: 1px solid var(--rule);
+}
+
+.notice a {
+  color: var(--field);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.notice a:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+/* ---------- Remaining outline button retheme ---------- */
+
+.btn-outline-danger {
+  --bs-btn-color: var(--loss);
+  --bs-btn-border-color: var(--loss);
+  --bs-btn-hover-color: #fff;
+  --bs-btn-hover-bg: var(--loss);
+  --bs-btn-hover-border-color: var(--loss);
+  --bs-btn-active-color: #fff;
+  --bs-btn-active-bg: #862F22;
+  --bs-btn-active-border-color: #862F22;
+}
+
+.btn-dark {
+  --bs-btn-bg: var(--ink);
+  --bs-btn-border-color: var(--ink);
+  --bs-btn-hover-bg: #13201A;
+  --bs-btn-hover-border-color: #13201A;
+}
+
+/* ---------- Inline mini-forms inside a table cell ---------- */
+
+.inline-form {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.inline-form .form-control,
+.inline-form .form-select {
+  padding: 0.35rem 0.6rem;
+  font-size: 0.9rem;
+}

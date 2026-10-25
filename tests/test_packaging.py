@@ -97,4 +97,4 @@ def test_health_check_endpoint(client):
     assert res.status_code == 200
     json_data = res.get_json()
     assert json_data["status"] == "ok"
-    assert json_data["version"] == "1.3.3"
+    assert json_data["version"] == "2.0.0"

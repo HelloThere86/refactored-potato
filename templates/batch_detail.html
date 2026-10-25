@@ -1,0 +1,112 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1 class="panel-title mb-1">{{ batch.batch_code }} &mdash; {{ batch.business_unit.name }}</h1>
+    <span class="status-tag{% if batch.status in ['growing', 'harvesting'] %} is-active{% else %} is-muted{% endif %}">
+      {{ batch.status.title() }}
+    </span>
+  </div>
+  <a href="/batches" class="btn btn-outline-secondary">Back to batches</a>
+</div>
+
+{% if needs_review %}
+<p class="notice notice-warning mb-4">
+  <strong>Review due.</strong> It's been {{ days_since_review }} days since the field estimate was last checked.
+  Update it below based on the current field stand.
+</p>
+{% endif %}
+
+<div class="row g-4 mb-4">
+  <div class="col-md-4">
+    <div class="info-panel figure-panel">
+      <span class="figure-label">Estimated saleable produce remaining</span>
+      <div class="figure-value">{{ "{:,}".format(batch.estimated_remaining_quantity) }}</div>
+      <span class="figure-label">Heads / stalks in field</span>
+    </div>
+  </div>
+
+  <div class="col-md-4">
+    <div class="info-panel">
+      <h3>Planting summary</h3>
+      <ul class="info-list">
+        <li><span class="label">Planted date</span><span class="value">{{ batch.planting_date.strftime('%d %b %Y') }}</span></li>
+        <li><span class="label">Planted volume</span><span class="value">{{ "{:,}".format(batch.quantity_planted) }} {{ batch.planted_unit }}</span></li>
+        <li><span class="label">Expected date</span><span class="value">{% if batch.expected_harvest_date %}{{ batch.expected_harvest_date.strftime('%d %b %Y') }}{% else %}Not set{% endif %}</span></li>
+        <li><span class="label">Last reviewed</span><span class="value">{{ batch.last_estimate_review_date.strftime('%d %b %Y') }} ({{ days_since_review }}d ago)</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="col-md-4">
+    <div class="info-panel">
+      <h3>Update field estimate</h3>
+      <form method="POST" action="/batches/{{ batch.id }}/update-estimate">
+        <div class="mb-2">
+          <label class="form-label" for="estimated_remaining_quantity">New remaining estimate</label>
+          <input type="number" id="estimated_remaining_quantity" name="estimated_remaining_quantity" class="form-control form-control-sm" value="{{ batch.estimated_remaining_quantity }}" min="0" required>
+        </div>
+        <div class="mb-3">
+          <label class="form-label" for="status">Status</label>
+          <select id="status" name="status" class="form-select form-select-sm">
+            <option value="growing" {% if batch.status == 'growing' %}selected{% endif %}>Growing</option>
+            <option value="harvesting" {% if batch.status == 'harvesting' %}selected{% endif %}>Harvesting</option>
+            <option value="completed" {% if batch.status == 'completed' %}selected{% endif %}>Completed</option>
+            <option value="cancelled" {% if batch.status == 'cancelled' %}selected{% endif %}>Cancelled</option>
+          </select>
+        </div>
+        <button type="submit" class="btn btn-primary btn-sm w-100">Save and record review</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<h2 class="section-title">Cut-to-order harvest history</h2>
+{% if harvests %}
+<div class="table-scroll">
+  <table class="data-table">
+    <caption class="visually-hidden">Every harvest and sale logged against this batch</caption>
+    <thead>
+      <tr>
+        <th scope="col">Date</th>
+        <th scope="col">Harvest event / sale</th>
+        <th scope="col" class="num">Total harvested</th>
+        <th scope="col" class="num">Sold to customer</th>
+        <th scope="col" class="num">Surplus cut</th>
+        <th scope="col" class="num">Surplus remaining</th>
+        <th scope="col" class="num">Actions / status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for h in harvests %}
+      <tr{% if h.is_voided %} class="is-voided"{% endif %}>
+        <td>{{ h.harvest_date.strftime('%d %b %Y %H:%M') }}</td>
+        <td>
+          {% if h.sale %}Sale #{{ h.sale.id }} &mdash; {{ h.sale.customer.name }}{% else %}Manual cut{% endif %}
+        </td>
+        <td class="num">{{ h.quantity_harvested }}</td>
+        <td class="num">{{ h.quantity_sold }}</td>
+        <td class="num">{{ h.quantity_surplus }}</td>
+        <td class="num">{{ h.quantity_remaining }}</td>
+        <td class="num">
+          {% if h.is_voided %}
+            <span class="status-tag is-muted">Cancelled</span>
+          {% elif h.sale and h.sale.is_voided %}
+            <form method="POST" action="/harvests/{{ h.id }}/cancel-uncut" class="d-inline"
+                  onsubmit="return confirm('Was this harvest entered by mistake with the crop NEVER physically cut? This will restore remaining surplus to field availability.');">
+              <button type="submit" class="btn btn-sm btn-outline-danger" title="Restore to field only if crop was never cut">Cancel harvest (crop uncut)</button>
+            </form>
+          {% else %}
+            <span class="status-tag is-active">Recorded</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="empty-note">No harvests recorded for this batch yet.</p>
+{% endif %}
+{% endblock %}
